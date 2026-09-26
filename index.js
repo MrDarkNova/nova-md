@@ -60,6 +60,16 @@ if (!existsSync(path.join(app, 'src', 'index.js'))) {
   }
   rmSync(app, { recursive: true, force: true })
   execFileSync('git', ['clone', '--depth', '1', '-b', branch, remote(), app], { stdio: 'inherit', env: authEnv() })
+} else {
+  try {
+    console.log('Checking for bot updates...')
+    execFileSync('git', ['fetch', '--depth', '1', 'origin', branch], { cwd: app, stdio: 'inherit', env: authEnv() })
+    execFileSync('git', ['reset', '--hard', 'FETCH_HEAD'], { cwd: app, stdio: 'inherit', env: authEnv() })
+    console.log('Bot code is up to date.')
+  } catch (err) {
+    console.error('Could not update. Starting the copy already on the panel.')
+    console.error(err?.message || err)
+  }
 }
 
 let current = null
