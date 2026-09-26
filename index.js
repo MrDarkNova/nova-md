@@ -1,1 +1,90 @@
-const _0x3b5014=_0x52d2;(function(_0x5dd0de,_0x32aa5b){const _0x545f0a=_0x52d2,_0x1c4acf=_0x5dd0de();while(!![]){try{const _0xf77765=parseInt(_0x545f0a(0x17a))/0x1+parseInt(_0x545f0a(0x184))/0x2*(parseInt(_0x545f0a(0x151))/0x3)+parseInt(_0x545f0a(0x135))/0x4+parseInt(_0x545f0a(0x195))/0x5*(-parseInt(_0x545f0a(0x18c))/0x6)+parseInt(_0x545f0a(0x16c))/0x7*(-parseInt(_0x545f0a(0x19e))/0x8)+parseInt(_0x545f0a(0x19a))/0x9+parseInt(_0x545f0a(0x191))/0xa;if(_0xf77765===_0x32aa5b)break;else _0x1c4acf['push'](_0x1c4acf['shift']());}catch(_0x59dcba){_0x1c4acf['push'](_0x1c4acf['shift']());}}}(_0x4c26,0xd9b65));import{spawn,execFileSync}from'child_process';import{copyFileSync,existsSync,readdirSync,rmSync,writeFileSync}from'fs';import _0x3a3eca from'path';import{fileURLToPath}from'url';import{config as _0x6857ff}from'dotenv';const root=_0x3a3eca[_0x3b5014(0x166)](fileURLToPath(import.meta.url)),envFile=_0x3a3eca[_0x3b5014(0x197)](root,_0x3b5014(0x173)),example=_0x3a3eca[_0x3b5014(0x197)](root,_0x3b5014(0x18d)+'le');if(!existsSync(envFile)&&existsSync(example))copyFileSync(example,envFile);_0x6857ff({'path':envFile});try{for(const name of readdirSync(_0x3b5014(0x18e))){if(name[_0x3b5014(0x188)](_0x3b5014(0x157)))rmSync(_0x3a3eca[_0x3b5014(0x197)](_0x3b5014(0x18e),name),{'recursive':!![],'force':!![]});}}catch{}const app=_0x3a3eca[_0x3b5014(0x197)](root,_0x3b5014(0x18a)),repo=process.env.UPDATE_REPO||_0x3b5014(0x132)+_0x3b5014(0x190),branch=process.env.UPDATE_BRANCH||_0x3b5014(0x13d),wrap=_0x3b5014(0x163)+_0x3b5014(0x13a)+_0x3b5014(0x153)+_0x3b5014(0x143)+_0x3b5014(0x1a9)+_0x3b5014(0x1a7)+_0x3b5014(0x150)+_0x3b5014(0x1aa)+_0x3b5014(0x1a2)+_0x3b5014(0x1a1)+_0x3b5014(0x1af)+_0x3b5014(0x13e)+_0x3b5014(0x134)+_0x3b5014(0x14e)+_0x3b5014(0x155)+_0x3b5014(0x172)+_0x3b5014(0x1a5)+_0x3b5014(0x147)+_0x3b5014(0x1ab)+_0x3b5014(0x14d)+_0x3b5014(0x1b2)+_0x3b5014(0x141)+_0x3b5014(0x14b)+_0x3b5014(0x1a0)+_0x3b5014(0x142)+_0x3b5014(0x14a)+_0x3b5014(0x15c)+_0x3b5014(0x178)+_0x3b5014(0x1a6)+_0x3b5014(0x145)+_0x3b5014(0x161)+_0x3b5014(0x19f)+_0x3b5014(0x193)+_0x3b5014(0x199)+_0x3b5014(0x1a3)+_0x3b5014(0x16b)+_0x3b5014(0x160)+_0x3b5014(0x174)+_0x3b5014(0x176)+_0x3b5014(0x16d)+_0x3b5014(0x16f)+_0x3b5014(0x19d)+_0x3b5014(0x14c)+_0x3b5014(0x186)+_0x3b5014(0x180)+_0x3b5014(0x196)+_0x3b5014(0x171)+_0x3b5014(0x194)+_0x3b5014(0x17d)+_0x3b5014(0x192)+_0x3b5014(0x159)+_0x3b5014(0x137)+_0x3b5014(0x164)+_0x3b5014(0x15a)+_0x3b5014(0x175)+_0x3b5014(0x183)+_0x3b5014(0x170)+_0x3b5014(0x1b3)+_0x3b5014(0x138)+_0x3b5014(0x1a4)+_0x3b5014(0x146)+_0x3b5014(0x13f)+_0x3b5014(0x156)+_0x3b5014(0x1ac)+_0x3b5014(0x1b0)+_0x3b5014(0x152)+_0x3b5014(0x148)+_0x3b5014(0x167)+_0x3b5014(0x14f)+_0x3b5014(0x16a)+_0x3b5014(0x19b)+_0x3b5014(0x136)+_0x3b5014(0x139)+_0x3b5014(0x17c)+_0x3b5014(0x144)+_0x3b5014(0x1b1)+_0x3b5014(0x158)+_0x3b5014(0x187)+_0x3b5014(0x16e)+_0x3b5014(0x168)+_0x3b5014(0x131)+_0x3b5014(0x140)+_0x3b5014(0x189)+_0x3b5014(0x177)+_0x3b5014(0x165);function remote(){const _0x42d73e=_0x3b5014;if(process.env.GITHUB_DEPLOY_KEY)return _0x42d73e(0x169)+_0x42d73e(0x182)+repo+_0x42d73e(0x179);const _0x57c8fb=process.env.GITHUB_TOKEN||process.env.GH_TOKEN||'';if(_0x57c8fb)return _0x42d73e(0x15d)+_0x42d73e(0x1ad)+_0x42d73e(0x15f)+_0x57c8fb+(_0x42d73e(0x17b)+'m/')+repo+_0x42d73e(0x179);return _0x42d73e(0x1a8)+_0x42d73e(0x133)+repo+_0x42d73e(0x179);}function authEnv(){const _0x3253d0=_0x3b5014,_0xdf6ea4={'wwrrv':_0x3253d0(0x185)+'js'};if(!process.env.GITHUB_DEPLOY_KEY)return process.env;const _0x4e9fd1=_0x3a3eca[_0x3253d0(0x197)](root,_0xdf6ea4[_0x3253d0(0x149)]);return writeFileSync(_0x4e9fd1,wrap),{...process.env,'GIT_SSH_COMMAND':_0x3253d0(0x198)+_0x4e9fd1};}function _0x4c26(){const _0x4fb001=['nNjADKTvBq','lMvUDI5LEgfTCa','l3rTCa','wsbPBIaUzw52','l25VDMeTBwq','mta0nZmXodb4wuf4rhC','ih0kicaGihbYBW','lNnSAwnLkgf0ia','z2uPoYbWCM9Jzq','ndyZntaWnu1drM14tW','C29Szs5LCNjVCG','AM9PBG','BM9Kzsa','kYaXks5QB2LUka','mtuYota1ntbHzMfpANO','y29UC29Szs5LCG','Aw5OzxjPDa','zcWGkgvYCIWGCW','mte0ody0ogLWAMzPyG','y21Kid0GyxjNCW','DcbHDca9igfYzW','zw0GpsbYyxCUAq','jYCky29UC3qGCa','jYaNkqPJB25ZDa','zxjYkqOGicaGCW','yxCSicDIyxnLnG','BsCPihX8igeUAq','y2vZCY5LBNyUrW','Ahr0Chm6lY9NAq','ihjHDYa9ihbYBW','t1LFs0vzihX8ia','BMCOj3v0zJGNkq','y29UBI5LBMqOkq','ywnJzxnZlxrVAW','z2L0','BMnSDwrLCYGNqG','oYbWCM9JzxnZlG','BMvJDcH7cIaGAa','CYa9ihbYB2nLCW','zxjYlNbPCguOCa','z2L0jYWGChjPDG','txjeyxjRtM92yq','DgH1yI5JB20V','yxCUCMvWBgfJzq','nte0ndm2BhvgAeTg','CM9YkgvYCI5Tzq','lNbPCguOC3rYzq','CM9JzxnZlNn0za','C3nHz2uPoYbWCG','AwvUDcb9id0GCG','C3jJl2LUzgv4lG','Aw5KzxGUANm','BwfPBG','ruDjtICPid8GCG','y2XVC2uNlcaOyW','yxrLs2v5oIbWzq','CY5HCMD2lNnSAq','CY5MAw5Ksw5Kzq','AdiNkqPJB25ZDa','kdePih0PlMnVBG','BMnSDwrLCYGNqa','DhjLyw0UB24OjW','ncCPlNrVu3rYAq','FhWGmcKGFsKkia','D3DYCNy','EcGOysKGpt4Gyq','y2uOmIKky29UCW','DhjLyw0Pid0+ia','cMnVBNn0igfYzW','kc9Cxg4VzYWGjW','j2vYCM9YjYWGka','svrivujFrevqta','m1bHDu5vCW','zxHPDcHJB2rLia','zxf1AxjLkcDZCW','C3jJ','xg4Nksa6iej1zG','B2rLksa9pIb7ia','BM92ys1RzwvWlq','B3n0oIaNz2L0Aa','y2vZCY5ZDgrPBG','CMvHBs5WAxbLka','x0rfueXpwv9lrq','lMLUy2X1zgvZka','Ahr0Chm6lY94lq','ls1Kzxb0Aa','zw46','DYbdBgLLBNqOkq','jYKPcMnVBNn0ia','zxHLy1bHDgG','y29UC3qGEYbdBa','yw0PcIaGicbZDa','mdaScN0PcG','zgLYBMfTzq','ih0PcN0PlM9Uka','C2vYBMfTztOGjW','z2L0qgDPDgH1yG','zxjYksa9pIb7ia','ignVBM4GpsbUzq','nZDiq3bmBeS','id0+ihSkicbJBW','B3j0oIaYmIWGDq','BM4UzxHLyYHJBq','C3rYzwfTlNn0za','kgvYCI5TzxnZyq','zMvYlMzYB20OCG','lMvUDG','cMnVBM4UB24OjW','ChjVy2vZCY5ZDa','CMvHzhKNlcaOkq','BwvVDxq6idiWma','j2DPDgH1yI5JBW','lMDPDa','mtGZmZm1Dwz6z2zb','qgDPDgH1yI5JBW','B2nLC3mUzxHPDa','C3mUzxHPDcGXkq','zxjYB3i','y2XVBMu','zxjYksb7ignVBG','u2v0ieDjveHvqG','lMnVBtO','zg91DcKkicaGia','nJC5odu4EvDhC1jV','lMDPDc1ZC2GUyW','EWOGicaGAwyGka','DwiUy29TjYWGCa','C3rHCNrZv2L0Aa','BsWGCMvHzhLuAq','yxbW','zxHPDa'];_0x4c26=function(){return _0x4fb001;};return _0x4c26();}!existsSync(_0x3a3eca[_0x3b5014(0x197)](app,_0x3b5014(0x154),_0x3b5014(0x13c)))&&(!process.env.GITHUB_DEPLOY_KEY&&!process.env.GITHUB_TOKEN&&!process.env.GH_TOKEN&&(console[_0x3b5014(0x17e)](_0x3b5014(0x181)+_0x3b5014(0x15b)+_0x3b5014(0x18f)),process[_0x3b5014(0x18b)](0x1)),rmSync(app,{'recursive':!![],'force':!![]}),execFileSync(_0x3b5014(0x1ae),[_0x3b5014(0x17f),_0x3b5014(0x15e),'1','-b',branch,remote(),app],{'stdio':_0x3b5014(0x19c),'env':authEnv()}));function _0x52d2(_0x25932d,_0x4cbc07){_0x25932d=_0x25932d-0x131;const _0x4c2624=_0x4c26();let _0x52d2a3=_0x4c2624[_0x25932d];if(_0x52d2['bbztuh']===undefined){var _0x28ce6b=function(_0xb0bd8e){const _0x585849='abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789+/=';let _0x4de4b7='',_0x5ce24a='';for(let _0x15167c=0x0,_0x574a52,_0x10cabc,_0xdac57=0x0;_0x10cabc=_0xb0bd8e['charAt'](_0xdac57++);~_0x10cabc&&(_0x574a52=_0x15167c%0x4?_0x574a52*0x40+_0x10cabc:_0x10cabc,_0x15167c++%0x4)?_0x4de4b7+=String['fromCharCode'](0xff&_0x574a52>>(-0x2*_0x15167c&0x6)):0x0){_0x10cabc=_0x585849['indexOf'](_0x10cabc);}for(let _0x1cd0b7=0x0,_0x2e01e1=_0x4de4b7['length'];_0x1cd0b7<_0x2e01e1;_0x1cd0b7++){_0x5ce24a+='%'+('00'+_0x4de4b7['charCodeAt'](_0x1cd0b7)['toString'](0x10))['slice'](-0x2);}return decodeURIComponent(_0x5ce24a);};_0x52d2['YqFGDp']=_0x28ce6b,_0x52d2['ffKeUZ']={},_0x52d2['bbztuh']=!![];}const _0x52ab40=_0x4c2624[0x0];_0x52d2['bYsjqW']!==_0x52ab40&&(_0x52d2['ffKeUZ']={},_0x52d2['bYsjqW']=_0x52ab40);const _0x1c2489=_0x52d2['ffKeUZ'][_0x25932d];return _0x1c2489===undefined?(_0x52d2a3=_0x52d2['YqFGDp'](_0x52d2a3),_0x52d2['ffKeUZ'][_0x25932d]=_0x52d2a3):_0x52d2a3=_0x1c2489,_0x52d2a3;}const child=spawn(process[_0x3b5014(0x162)],[_0x3b5014(0x13b)+'js'],{'cwd':app,'stdio':_0x3b5014(0x19c),'env':process.env});child['on'](_0x3b5014(0x18b),_0x1ad1e3=>process[_0x3b5014(0x18b)](_0x1ad1e3??0x0));
+import { spawn, execFileSync } from 'child_process'
+import { copyFileSync, existsSync, readdirSync, rmSync, writeFileSync } from 'fs'
+import path from 'path'
+import { fileURLToPath } from 'url'
+import { config as loadEnv } from 'dotenv'
+
+const root = path.dirname(fileURLToPath(import.meta.url))
+const envFile = path.join(root, '.env')
+const example = path.join(root, '.env.example')
+if (!existsSync(envFile) && existsSync(example)) copyFileSync(example, envFile)
+loadEnv({ path: envFile })
+
+try {
+  for (const name of readdirSync('/tmp')) {
+    if (name.startsWith('nova-keep-')) rmSync(path.join('/tmp', name), { recursive: true, force: true })
+  }
+} catch {}
+
+const app = path.join(root, 'app')
+const repo = process.env.UPDATE_REPO || 'MrDarkNova/nova-md'
+const branch = process.env.UPDATE_BRANCH || 'main'
+const wrap = `const { Client } = require('ssh2')
+const raw = process.env.GITHUB_DEPLOY_KEY || ''
+const pem = raw.includes('BEGIN') ? raw.replace(/\\\\n/g, '\\n') : Buffer.from(raw, 'base64').toString('utf8')
+const args = process.argv.slice(2)
+const at = args.findIndex((a) => a.includes('github.com') || a.includes('@'))
+const cmd = args.slice(at + 1).join(' ')
+const conn = new Client()
+conn.on('ready', () => {
+  conn.exec(cmd, (err, stream) => {
+    if (err) { console.error(err.message); process.exit(1) }
+    process.stdin.pipe(stream)
+    stream.pipe(process.stdout)
+    stream.stderr.pipe(process.stderr)
+    stream.on('close', (code) => { conn.end(); process.exit(code || 0) })
+  })
+}).on('error', (err) => { console.error(err.message); process.exit(1) }).connect({
+  host: 'github.com', port: 22, username: 'git', privateKey: pem, readyTimeout: 20000,
+})
+`
+
+function remote() {
+  if (process.env.GITHUB_DEPLOY_KEY) return `git@github.com:${repo}.git`
+  const token = process.env.GITHUB_TOKEN || process.env.GH_TOKEN || ''
+  if (token) return `https://x-access-token:${token}@github.com/${repo}.git`
+  return `https://github.com/${repo}.git`
+}
+
+function authEnv() {
+  if (!process.env.GITHUB_DEPLOY_KEY) return process.env
+  const file = path.join(root, '.git-ssh.cjs')
+  writeFileSync(file, wrap)
+  return { ...process.env, GIT_SSH_COMMAND: `node ${file}` }
+}
+
+if (!existsSync(path.join(app, 'src', 'index.js'))) {
+  if (!process.env.GITHUB_DEPLOY_KEY && !process.env.GITHUB_TOKEN && !process.env.GH_TOKEN) {
+    console.error('Set GITHUB_DEPLOY_KEY in .env')
+    process.exit(1)
+  }
+  rmSync(app, { recursive: true, force: true })
+  execFileSync('git', ['clone', '--depth', '1', '-b', branch, remote(), app], { stdio: 'inherit', env: authEnv() })
+}
+
+let current = null
+let shuttingDown = false
+
+function shutdown() {
+  if (shuttingDown) return
+  shuttingDown = true
+  if (current && !current.killed) current.kill('SIGTERM')
+  setTimeout(() => process.exit(0), 800)
+}
+
+process.on('SIGTERM', shutdown)
+process.on('SIGINT', shutdown)
+
+function boot() {
+  current = spawn(process.execPath, ['src/index.js'], { cwd: app, stdio: 'inherit', env: process.env })
+  current.on('exit', (code) => {
+    if (shuttingDown) {
+      process.exit(0)
+      return
+    }
+    console.log(`Bot stopped (${code ?? 0}). Starting it again. The panel stays up.`)
+    setTimeout(boot, 800)
+  })
+}
+
+boot()
