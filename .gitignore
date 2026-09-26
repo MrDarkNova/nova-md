@@ -1,7 +1,12 @@
 node_modules/
-app/
-.env
 session/
-data/
-media/
+!session/.gitkeep
+data/*.json
+data/bin/
+!data/.gitkeep
+media/*
+!media/.gitkeep
+.env
+.git-ssh.cjs
 *.log
+.DS_Store
