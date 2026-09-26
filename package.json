@@ -1,0 +1,22 @@
+{
+  "name": "nova-public",
+  "version": "2.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Deploy this repo. It fetches the private DARKNOVA bot on start.",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {
+    "@hapi/boom": "^10.0.1",
+    "@whiskeysockets/baileys": "^6.7.21",
+    "dotenv": "^16.4.7",
+    "pino": "^9.6.0",
+    "qrcode-terminal": "^0.12.0",
+    "sharp": "^0.33.5"
+  }
+}
