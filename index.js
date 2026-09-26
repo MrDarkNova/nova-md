@@ -1,5 +1,5 @@
 import { spawn, execFileSync } from 'child_process'
-import { copyFileSync, existsSync, readdirSync, rmSync, writeFileSync } from 'fs'
+import { copyFileSync, existsSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'fs'
 import path from 'path'
 import { fileURLToPath } from 'url'
 import { config as loadEnv } from 'dotenv'
@@ -75,8 +75,25 @@ function shutdown() {
 process.on('SIGTERM', shutdown)
 process.on('SIGINT', shutdown)
 
+function childEnv() {
+  const env = { ...process.env }
+  if (!existsSync(envFile)) return env
+  const text = readFileSync(envFile, 'utf8')
+  for (const line of text.split('\n')) {
+    const trimmed = line.trim()
+    if (!trimmed || trimmed.startsWith('#')) continue
+    const eq = trimmed.indexOf('=')
+    if (eq < 1) continue
+    const key = trimmed.slice(0, eq).trim()
+    let value = trimmed.slice(eq + 1).trim()
+    if ((value.startsWith('"') && value.endsWith('"')) || (value.startsWith("'") && value.endsWith("'"))) value = value.slice(1, -1)
+    env[key] = value
+  }
+  return env
+}
+
 function boot() {
-  current = spawn(process.execPath, ['src/index.js'], { cwd: app, stdio: 'inherit', env: process.env })
+  current = spawn(process.execPath, ['src/index.js'], { cwd: app, stdio: 'inherit', env: childEnv() })
   current.on('exit', (code) => {
     if (shuttingDown) {
       process.exit(0)
