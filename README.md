@@ -51,7 +51,7 @@ The bot stays in private mode until the owner sends `/mode public`.
 | Style | Look |
 | --- | --- |
 | `1` classic | Rounded corners |
-| `2` block | Double corners |
+| `2` cipher | Book title frame |
 | `3` soft | Thin corners |
 
 `/repo` is for the owner. It sends the GitHub preview with stars, forks, language, and the description.
