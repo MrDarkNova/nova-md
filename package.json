@@ -16,13 +16,9 @@
     "@whiskeysockets/baileys": "7.0.0-rc14",
     "canvaskit-wasm": "^0.42.0",
     "dotenv": "^16.4.7",
-    "@imgly/background-removal-node": "1.4.5",
     "pino": "^9.6.0",
     "qrcode-terminal": "^0.12.0",
     "sharp": "^0.33.5",
     "ssh2": "^1.17.0"
-  },
-  "overrides": {
-    "sharp": "$sharp"
   }
 }
