@@ -13,8 +13,7 @@
   },
   "dependencies": {
     "@hapi/boom": "^10.0.1",
-    "@whiskeysockets/baileys": "^6.7.21",
-    "@chatunity/baileys": "^3.3.0",
+    "@whiskeysockets/baileys": "7.0.0-rc14",
     "canvaskit-wasm": "^0.42.0",
     "dotenv": "^16.4.7",
     "pino": "^9.6.0",
