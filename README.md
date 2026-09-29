@@ -20,7 +20,7 @@
 ```bash
 git clone https://github.com/MrDarkNova/nova-md.git
 cd nova-md
-cp .env.example .env
+Edit `.env` and put the bot number in `BOT_PHONE`.
 npm install
 npm start
 ```

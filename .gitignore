@@ -6,7 +6,6 @@ data/bin/
 !data/.gitkeep
 media/*
 !media/.gitkeep
-.env
 .git-ssh.cjs
 *.log
 .DS_Store
