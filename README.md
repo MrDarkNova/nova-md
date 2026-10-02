@@ -34,7 +34,7 @@ On first start the terminal asks who the bot belongs to.
 
 The code looks like `ABCD-EFGH`. On the phone: WhatsApp, Linked devices, Link a device, Link with phone number instead.
 
-The bot stays in private mode until the owner sends `/mode public`.
+The bot starts in **private** mode: it only answers the owner (and sudo). Random users get no reply. Send `/mode public` to answer everyone. Send `/mode` with no argument to see the current mode and usage.
 
 ## What it can do
 
