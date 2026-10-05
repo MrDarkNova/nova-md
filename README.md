@@ -56,7 +56,7 @@ The bot starts in **private** mode: it only answers the owner (and sudo). Random
 
 `/repo` sends the Telegram pairing link with a preview. It works in private mode for the owner and sudo, and for everyone in public mode.
 
-`/pair 2348012345678` is for the owner, in a private chat. It sends the steps first, then the pairing code alone in the next message, so it is easy to copy. Inside a paired bot it points to the Telegram bot instead.
+`/pair 2348012345678` is for the owner. It sends three short steps first, then the pairing code alone in the next message, in the same chat where you used the command, so it is easy to copy. Inside a paired bot it points to the Telegram bot instead.
 
 `/update` checks this repo. If nothing changed, it says the bot is up to date and does not restart. Your `.env` and session stay where they are.
 
