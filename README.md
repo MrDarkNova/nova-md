@@ -44,7 +44,7 @@ The bot starts in **private** mode: it only answers the owner (and sudo). Random
 | Media | `/play`, `/video`, `/tiktok`, `/ig`, `/spotify` |
 | Group | `/kick`, `/promote`, `/welcome`, `/antilink`, `/antimedia` |
 | Tools | `/removebg`, `/sticker`, `/tts`, `/qr` |
-| Owner | `/update`, `/pair`, `/ban`, `/mode` |
+| Owner | `/update`, `/pair`, `/ban`, `/mode`, `/addsudo`, `/delsudo`, `/sudolist` |
 
 `/setmenu` keeps the same box size and changes only the frame.
 
@@ -54,7 +54,9 @@ The bot starts in **private** mode: it only answers the owner (and sudo). Random
 | `2` cipher | Book title frame |
 | `3` edge | Cut corners |
 
-`/repo` is for the owner. It sends the GitHub preview with stars, forks, language, and the description.
+`/repo` sends the Telegram pairing link with a preview. It works in private mode for the owner and sudo, and for everyone in public mode.
+
+`/pair 2348012345678` is for the owner, in a private chat. It sends the steps first, then the pairing code alone in the next message, so it is easy to copy. Inside a paired bot it points to the Telegram bot instead.
 
 `/update` checks this repo. If nothing changed, it says the bot is up to date and does not restart. Your `.env` and session stay where they are.
 
