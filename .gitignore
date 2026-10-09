@@ -9,3 +9,4 @@ media/*
 .git-ssh.cjs
 *.log
 .DS_Store
+data/yt-cookies.txt
