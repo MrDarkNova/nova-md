@@ -1,0 +1,70 @@
+{
+ "title": "DarkNova Games",
+ "games": [
+  {
+   "id": "snake",
+   "name": "Snake",
+   "emoji": "🐍",
+   "color": "#3ddc84",
+   "tag": "Swipe",
+   "about": "Swipe to steer. Eat, grow, do not crash.",
+   "aliases": []
+  },
+  {
+   "id": "2048",
+   "name": "2048",
+   "emoji": "🔢",
+   "color": "#f2b179",
+   "tag": "Swipe",
+   "about": "Slide and merge the tiles to reach 2048.",
+   "aliases": [],
+   "path": "2048/index.html",
+   "bestKey": "bestScore",
+   "credit": "Gabriele Cirulli (MIT)"
+  },
+  {
+   "id": "flap",
+   "name": "Flap",
+   "emoji": "🐤",
+   "color": "#ffd24a",
+   "tag": "Tap",
+   "about": "Tap to flap through the gaps.",
+   "aliases": [
+    "flappy"
+   ]
+  },
+  {
+   "id": "runner",
+   "name": "Runner",
+   "emoji": "🦊",
+   "color": "#ff9f43",
+   "tag": "Tap and swipe",
+   "about": "Jump the spikes and duck the birds.",
+   "aliases": [
+    "dino"
+   ]
+  },
+  {
+   "id": "memory",
+   "name": "Memory",
+   "emoji": "🃏",
+   "color": "#ff7eb6",
+   "tag": "Tap",
+   "about": "Flip the cards and find every pair.",
+   "aliases": [],
+   "time": true
+  },
+  {
+   "id": "mines",
+   "name": "Mines",
+   "emoji": "💣",
+   "color": "#6c8cff",
+   "tag": "Tap and hold",
+   "about": "Find the safe squares. Flag the mines.",
+   "aliases": [
+    "minesweeper"
+   ],
+   "time": true
+  }
+ ]
+}

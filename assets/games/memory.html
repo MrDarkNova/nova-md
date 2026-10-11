@@ -1,0 +1,387 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="theme-color" content="#0b0f1a">
+<meta name="description" content="Memory. Flip the cards and find every pair.">
+<title>Memory</title>
+<link rel="stylesheet" href="common.css">
+<style>
+.btn.primary{color:#2a0716}
+.chips{display:flex;margin:14px -3px 4px}
+.chip{flex:1 1 0;margin:0 3px;height:46px;line-height:44px;border-radius:13px;background:var(--panel2);border:1px solid rgba(255,255,255,.1);font-weight:700;font-size:15px;text-align:center;color:var(--fg)}
+.chip.on{background:var(--acc);border-color:transparent;color:#2a0716}
+.ov p.dinfo{min-height:40px;margin-top:6px;color:var(--fg)}
+.gb{flex:1 1 0;max-width:170px;height:48px;margin:0 5px;border-radius:14px;background:var(--panel2);border:1px solid rgba(255,255,255,.09);font-weight:700;font-size:15px;color:var(--fg);touch-action:manipulation}
+.gb.on{background:var(--acc);color:#2a0716}
+@media (max-width:359px){#bar .ttl{display:none}#bar .stats{margin-left:auto}#bar .stat{margin-left:9px}}
+@media (orientation:landscape) and (max-height:520px){
+  #app #pad{position:absolute;right:calc(var(--safe-r) + 8px);top:calc(var(--safe-t) + 58px);bottom:8px;width:104px;flex-direction:column;padding:0}
+  #app #stage.flush{padding:0 118px 0 0}
+  .gb{flex:none;width:100%;max-width:none;margin:5px 0}
+}
+</style>
+</head>
+<body data-game="memory" data-title="Memory" style="--acc:#ff7eb6">
+<script src="common.js"></script>
+<script>
+(function () {
+  'use strict';
+  var S = NG.stage({
+    fill: true, flush: true,
+    stats: [['moves', 'Moves', '0'], ['time', 'Time', '0:00'], ['best', 'Best', '–']]
+  });
+  var ctx = S.ctx, ACC = '#ff7eb6';
+
+  /* ---------- rules ---------- */
+  var DIFFS = {
+    easy:   { name: 'Easy',   cols: 4, rows: 3, pairs: 6,  desc: '12 cards, 6 pairs' },
+    normal: { name: 'Normal', cols: 4, rows: 4, pairs: 8,  desc: '16 cards, 8 pairs' },
+    hard:   { name: 'Hard',   cols: 5, rows: 6, pairs: 15, desc: '30 cards, 15 pairs' }
+  };
+  var ORDER = ['easy', 'normal', 'hard'];
+  // 32 emoji that cannot be mistaken for each other (different shapes and colours). Each game uses a random subset.
+  var POOL = ['🐢', '🐙', '🦋', '🐳', '🐧', '🦄', '🐝', '🦀',
+    '🐸', '🦉', '🐘', '🦒', '🍎', '🍌', '🍇', '🍉',
+    '🍓', '🍍', '🍕', '🍩', '🌵', '🍄', '⭐', '🔥',
+    '🌈', '⚽', '🎈', '🚀', '🎸', '🔔', '🎁', '🚗'];
+  var FLIP = 0.22, SHOW = 0.72, GAP = 8, MARGIN = 10;
+
+  var diff = 'normal', sel = 'normal';
+  try { var sd = NG.store.get('ng:memory:diff'); if (sd && DIFFS[sd]) { diff = sd; sel = sd; } } catch (e) { /* default */ }
+
+  var state = 'ready', cards = [], L = { cols: 4, rows: 4, w: 60, h: 60, gap: GAP, ox: 0, oy: 0 };
+  var pairs = 0, found = 0, moves = 0, elapsed = 0, started = false, finalSecs = 0, shownS = -1;
+  var firstIdx = -1, lock = false, hideT = 0, missT = 0, hideA = -1, hideB = -1, pending = [], overT = 0, won = false;
+  var clock = 0, parts = [], cur = 0, kbd = false;
+
+  /* ---------- best times: one per difficulty ---------- */
+  function bestKey(d) { return 'ng:memory:best:' + d; }
+  function getBest(d) {
+    var v = NG.store.get(bestKey(d)), n = Number(v);
+    return v !== null && isFinite(n) && n > 0 ? n : 0;
+  }
+  function fmt(s) { s = Math.max(0, Math.floor(s)); var m = Math.floor(s / 60), r = s % 60; return m + ':' + (r < 10 ? '0' : '') + r; }
+  function bestText(d) { var b = getBest(d); return b ? fmt(b) : '–'; }
+
+  /* ---------- the deal ---------- */
+  function deal() {
+    var d = DIFFS[diff];
+    pairs = d.pairs; found = 0; moves = 0; elapsed = 0; started = false; finalSecs = 0; shownS = -1;
+    firstIdx = -1; lock = false; hideT = 0; missT = 0; hideA = hideB = -1; pending = []; overT = 0; won = false; parts = []; cur = 0;
+    var vals = NG.shuffle(POOL.slice()).slice(0, pairs);
+    var list = NG.shuffle(vals.concat(vals));
+    cards = list.map(function (v, i) {
+      return { v: v, up: false, matched: false, settled: false, p: 0, pop: 0, shake: 0, born: clock + 0.05 + i * 0.03 };
+    });
+    S.stat('moves', 0); S.stat('time', '0:00'); S.stat('best', bestText(diff));
+    computeLayout();
+  }
+
+  function computeLayout() {
+    if (!cards.length) return;
+    var d = DIFFS[diff], best = null;
+    var aw = S.W - 2 * MARGIN, ah = S.H - 2 * MARGIN;
+    [[d.cols, d.rows], [d.rows, d.cols]].forEach(function (cr) {
+      var c = cr[0], r = cr[1];
+      var w = (aw - (c - 1) * GAP) / c, h = (ah - (r - 1) * GAP) / r;
+      if (h > w * 1.3) h = w * 1.3;          // cards stay card shaped
+      if (w > h * 1.25) w = h * 1.25;
+      if (w > 150) { w = 150; if (h > 195) h = 195; }
+      var m = Math.min(w, h);
+      if (!best || m > best.m + 0.5 || (Math.abs(m - best.m) <= 0.5 && w * h > best.w * best.h)) best = { c: c, r: r, w: w, h: h, m: m };
+    });
+    var gw = best.c * best.w + (best.c - 1) * GAP, gh = best.r * best.h + (best.r - 1) * GAP;
+    L = { cols: best.c, rows: best.r, w: best.w, h: best.h, gap: GAP, ox: (S.W - gw) / 2, oy: (S.H - gh) / 2 };
+  }
+  function rect(i) {
+    var c = i % L.cols, r = Math.floor(i / L.cols);
+    return { x: L.ox + c * (L.w + L.gap), y: L.oy + r * (L.h + L.gap) };
+  }
+  function hit(x, y) {
+    var half = L.gap / 2;
+    for (var i = 0; i < cards.length; i++) {
+      var r = rect(i);
+      if (x >= r.x - half && x <= r.x + L.w + half && y >= r.y - half && y <= r.y + L.h + half) return i;
+    }
+    return -1;
+  }
+  S.onresize = computeLayout;
+
+  /* ---------- playing ---------- */
+  function start() {
+    NG.closeDialog();
+    diff = sel;
+    NG.store.set('ng:memory:diff', diff);
+    deal();
+    state = 'play';
+  }
+  function starsFor(m) {
+    if (m <= Math.ceil(pairs * 1.5)) return 3;
+    if (m <= Math.ceil(pairs * 2.2)) return 2;
+    return 1;
+  }
+  // A tap on card i. Returns true when the card was flipped.
+  function flip(i) {
+    if (state !== 'play') return false;
+    var c = cards[i];
+    if (!c || c.up || c.matched || lock) return false;
+    started = true;
+    c.up = true;
+    NG.snd('tap');
+    if (firstIdx < 0) { firstIdx = i; return true; }
+    var a = cards[firstIdx], ai = firstIdx;
+    firstIdx = -1;
+    moves++; S.stat('moves', moves);
+    if (a.v === c.v) {
+      a.matched = c.matched = true; found++;
+      pending.push({ a: ai, b: i, t: FLIP + 0.05 });
+      if (found === pairs) { state = 'over'; won = true; finalSecs = elapsed; overT = 1.0; }
+    } else {
+      lock = true; hideT = SHOW; missT = FLIP; hideA = ai; hideB = i;
+    }
+    return true;
+  }
+  function burst(x, y) {
+    for (var k = 0; k < 14; k++) {
+      var a = Math.random() * 6.283, sp = NG.rand(70, 230);
+      parts.push({ x: x, y: y, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp - 40, t: 0.7, c: NG.pick(['#ff7eb6', '#ffd24a', '#ffffff', '#6cf0c2']), r: NG.rand(2, 4.2), s: Math.random() * 6 });
+    }
+  }
+  function finish(o) {
+    var gk = 'ng:memory:best', pb = getBest(diff);
+    // NG.over keeps one best score under one key: point that key at this difficulty's best first
+    try { if (pb > 0) NG.store.set(gk, String(pb)); else window.localStorage.removeItem(gk); } catch (e) { /* ignore */ }
+    NG.over(o);
+    var nb = Number(NG.store.get(gk));
+    if (isFinite(nb) && nb > 0 && (pb === 0 || nb < pb)) NG.store.set(bestKey(diff), String(nb));
+    var all = 0;
+    ORDER.forEach(function (k) { var b = getBest(k); if (b && (!all || b < all)) all = b; });
+    if (all) NG.store.set(gk, String(all));
+    S.stat('best', bestText(diff));
+  }
+  function showWin() {
+    var secs = Math.max(1, Math.floor(finalSecs)), n = starsFor(moves), s = '';
+    for (var k = 1; k <= 3; k++) s += k <= n ? '★' : '<span style="opacity:.3">★</span>';
+    finish({
+      score: secs, lower: true, win: true, title: 'All matched!', format: fmt,
+      lines: ['<span style="color:#ffc857;font-size:30px;letter-spacing:4px">' + s + '</span>', moves + ' moves on ' + DIFFS[diff].name],
+      again: start
+    });
+  }
+
+  /* ---------- menu ---------- */
+  function openMenu(inProgress) {
+    if (inProgress) state = 'ready';              // freezes the game while the menu is open
+    var btns = [{ t: 'Play', primary: true, fn: start }];
+    if (inProgress) btns.push({ t: 'Keep playing', fn: function () { state = 'play'; } });
+    var ov = NG.dialog({
+      title: 'Memory',
+      lines: ['Flip two cards at a time and find every pair.', 'Fewer moves earn more stars.'],
+      buttons: btns
+    });
+    var card = ov.querySelector('.card'), bt = ov.querySelector('.btns');
+    var chips = NG.el('div', 'chips'), info = NG.el('p', 'dinfo', ''), els = {};
+    function refresh() {
+      ORDER.forEach(function (k) { els[k].className = 'chip' + (k === sel ? ' on' : ''); });
+      var b = getBest(sel);
+      info.innerHTML = DIFFS[sel].desc + '<br><span style="color:var(--muted)">' + (b ? 'Best time ' + fmt(b) : 'No best time yet') + '</span>';
+    }
+    ORDER.forEach(function (k) {
+      var b = NG.el('button', 'chip', DIFFS[k].name); b.setAttribute('type', 'button'); els[k] = b;
+      b.addEventListener('click', function () {
+        sel = k; NG.snd('tap'); refresh();
+        if (!inProgress) { diff = sel; deal(); }      // show the new board behind the menu
+      });
+      chips.appendChild(b);
+    });
+    card.insertBefore(chips, bt); card.insertBefore(info, bt);
+    refresh();
+  }
+
+  /* ---------- pad ---------- */
+  function padBtn(text, label, fn) {
+    var b = NG.el('button', 'gb', text);
+    b.setAttribute('type', 'button'); b.setAttribute('aria-label', label);
+    b.addEventListener('pointerdown', function () { b.classList.add('on'); });
+    ['pointerup', 'pointercancel', 'pointerleave'].forEach(function (n) { b.addEventListener(n, function () { b.classList.remove('on'); }); });
+    b.addEventListener('click', function () { NG.snd('tap'); fn(); });
+    S.pad.appendChild(b);
+    return b;
+  }
+  padBtn('New game', 'New game', function () { start(); });
+  padBtn('Level', 'Change level', function () { openMenu(state === 'play' && started); });
+
+  /* ---------- input ---------- */
+  S.cv.addEventListener('pointerdown', function (e) {
+    if (state !== 'play') return;
+    var p = S.pos(e), i = hit(p.x, p.y);
+    if (i >= 0) { kbd = false; cur = i; flip(i); }
+  });
+  NG.input(function (k, down) {
+    if (!down) return;
+    var n = cards.length, c = L.cols, r = L.rows;
+    if (k === 'left' || k === 'right' || k === 'up' || k === 'down') {
+      kbd = true;
+      var x = cur % c, y = Math.floor(cur / c);
+      if (k === 'left') x = (x + c - 1) % c; else if (k === 'right') x = (x + 1) % c;
+      else if (k === 'up') y = (y + r - 1) % r; else y = (y + 1) % r;
+      cur = NG.clamp(y * c + x, 0, n - 1);
+    } else if (k === 'act') {
+      kbd = true; if (state === 'play') flip(cur);
+    }
+  });
+
+  /* ---------- update ---------- */
+  function update(dt) {
+    clock += dt;
+    var i, p;
+    for (i = parts.length - 1; i >= 0; i--) {
+      p = parts[i]; p.t -= dt; p.x += p.vx * dt; p.y += p.vy * dt; p.vy += 320 * dt; p.vx *= 0.99;
+      if (p.t <= 0) parts.splice(i, 1);
+    }
+    for (i = 0; i < cards.length; i++) {
+      var c = cards[i], tg = c.up ? 1 : 0;
+      if (c.p < tg) c.p = Math.min(tg, c.p + dt / FLIP); else if (c.p > tg) c.p = Math.max(tg, c.p - dt / FLIP);
+      if (c.pop > 0) c.pop = Math.max(0, c.pop - dt / 0.55);
+      if (c.shake > 0) c.shake = Math.max(0, c.shake - dt);
+    }
+    if (state === 'ready') return;                  // menu open: the game is frozen
+    if (state === 'play' && started) elapsed += dt;
+    var s = Math.floor(elapsed);
+    if (s !== shownS) { shownS = s; S.stat('time', fmt(s)); }
+    if (lock) {
+      if (missT > 0) {
+        missT -= dt;
+        if (missT <= 0 && hideA >= 0) { cards[hideA].shake = 0.3; cards[hideB].shake = 0.3; NG.beep(220, 0.12, 'triangle', 0.06, 150); }
+      }
+      hideT -= dt;
+      if (hideT <= 0) {
+        lock = false;
+        if (hideA >= 0) cards[hideA].up = false;
+        if (hideB >= 0) cards[hideB].up = false;
+        hideA = hideB = -1;
+      }
+    }
+    for (i = pending.length - 1; i >= 0; i--) {
+      var m = pending[i]; m.t -= dt;
+      if (m.t <= 0) {
+        pending.splice(i, 1);
+        [m.a, m.b].forEach(function (k) {
+          cards[k].pop = 1; cards[k].settled = true;
+          var r = rect(k); burst(r.x + L.w / 2, r.y + L.h / 2);
+        });
+        NG.snd('coin');
+      }
+    }
+    if (state === 'over' && won && overT > 0) {
+      overT -= dt;
+      if (overT <= 0) showWin();
+    }
+  }
+
+  /* ---------- drawing ---------- */
+  function easeBack(t) { var u = t - 1; return 1 + 2.70158 * u * u * u + 1.70158 * u * u; }
+  var EMOJI = '"Apple Color Emoji","Segoe UI Emoji","Noto Color Emoji","Twemoji Mozilla",sans-serif';
+  function star4(x, y, r) {
+    ctx.beginPath();
+    for (var k = 0; k < 8; k++) {
+      var a = k * Math.PI / 4 - Math.PI / 2, rr = k % 2 === 0 ? r : r * 0.38;
+      var px = x + Math.cos(a) * rr, py = y + Math.sin(a) * rr;
+      if (k) ctx.lineTo(px, py); else ctx.moveTo(px, py);
+    }
+    ctx.closePath();
+  }
+  function drawCard(c, i) {
+    var bt = Math.min(1, (clock - c.born) / 0.3);
+    if (bt <= 0) return;
+    var r = rect(i), w = L.w, h = L.h;
+    var flipS = Math.abs(1 - 2 * c.p), face = c.p >= 0.5;
+    var lift = 1 + 0.07 * Math.sin(Math.PI * c.p);
+    var pop = c.pop > 0 ? 1 + 0.18 * Math.sin(Math.PI * (1 - c.pop)) : 1;
+    var k = easeBack(bt) * lift * pop;
+    var sh = c.shake > 0 ? Math.sin(c.shake * 70) * 3.5 : 0;
+    var rad = Math.min(w, h) * 0.14, mn = Math.min(w, h);
+    ctx.save();
+    ctx.translate(r.x + w / 2 + sh, r.y + h / 2);
+    ctx.scale(Math.max(0.001, flipS * k), k);
+    var dim = c.settled ? 1 - c.pop : 0;
+    ctx.globalAlpha = 1 - 0.62 * dim;
+    if (face) {
+      NG.rr(ctx, -w / 2, -h / 2, w, h, rad);
+      ctx.fillStyle = '#fff6fa'; ctx.fill();
+      ctx.lineWidth = 2.5; ctx.strokeStyle = c.settled ? '#3ddc84' : ACC; ctx.stroke();
+      ctx.font = Math.floor(mn * 0.58) + 'px ' + EMOJI;
+      ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillStyle = '#000';
+      ctx.fillText(c.v, 0, mn * 0.04);
+    } else {
+      var g = ctx.createLinearGradient(-w / 2, -h / 2, w / 2, h / 2);
+      g.addColorStop(0, '#ff9ccb'); g.addColorStop(1, '#d94d93');
+      NG.rr(ctx, -w / 2, -h / 2, w, h, rad);
+      ctx.fillStyle = g; ctx.fill();
+      NG.rr(ctx, -w / 2 + 5, -h / 2 + 5, w - 10, h - 10, Math.max(2, rad - 3));
+      ctx.lineWidth = 1.5; ctx.strokeStyle = 'rgba(255,255,255,.42)'; ctx.stroke();
+      ctx.fillStyle = 'rgba(255,255,255,.62)';
+      star4(0, 0, mn * 0.24); ctx.fill();
+      ctx.fillStyle = 'rgba(255,255,255,.3)';
+      var dx = w / 2 - 14, dy = h / 2 - 14, dr = Math.max(1.5, mn * 0.025);
+      [[-1, -1], [1, -1], [-1, 1], [1, 1]].forEach(function (q) { ctx.beginPath(); ctx.arc(q[0] * dx, q[1] * dy, dr, 0, 6.3); ctx.fill(); });
+    }
+    ctx.restore();
+    if (kbd && i === cur && state === 'play') {
+      NG.rr(ctx, r.x - 3, r.y - 3, w + 6, h + 6, rad + 3);
+      ctx.lineWidth = 2.5; ctx.strokeStyle = '#ffffff'; ctx.stroke();
+    }
+  }
+  function draw() {
+    S.clear('#0d1424');
+    var g = ctx.createRadialGradient(S.W / 2, S.H * 0.4, 10, S.W / 2, S.H * 0.4, Math.max(S.W, S.H) * 0.75);
+    g.addColorStop(0, 'rgba(255,126,182,.10)'); g.addColorStop(1, 'rgba(255,126,182,0)');
+    ctx.fillStyle = g; ctx.fillRect(0, 0, S.W, S.H);
+    for (var i = 0; i < cards.length; i++) drawCard(cards[i], i);
+    for (var j = 0; j < parts.length; j++) {
+      var p = parts[j];
+      ctx.globalAlpha = Math.max(0, Math.min(1, p.t * 2));
+      ctx.fillStyle = p.c;
+      ctx.save(); ctx.translate(p.x, p.y); ctx.rotate(p.s + p.t * 6);
+      ctx.fillRect(-p.r, -p.r, p.r * 2, p.r * 2);
+      ctx.restore();
+    }
+    ctx.globalAlpha = 1;
+  }
+
+  /* ---------- go ---------- */
+  deal();
+  var loop = NG.loop(update, draw);
+  loop.start();
+  NG.expose({
+    score: function () { return won ? Math.max(1, Math.floor(finalSecs)) : Math.floor(elapsed); },
+    state: function () { return state; },
+    moves: function () { return moves; },
+    time: function () { return elapsed; },
+    pairs: function () { return pairs; },
+    found: function () { return found; },
+    diff: function () { return diff; },
+    locked: function () { return lock; },
+    best: function () { return getBest(diff); },
+    layout: function () { return { cols: L.cols, rows: L.rows, cardW: L.w, cardH: L.h, count: cards.length, diff: diff }; },
+    // every card: its emoji (face), state, grid position and the centre in page coordinates (to tap it)
+    cards: function () {
+      var b = S.cv.getBoundingClientRect();
+      return cards.map(function (c, i) {
+        var r = rect(i);
+        return { i: i, face: c.v, up: c.up, matched: c.matched, col: i % L.cols, row: Math.floor(i / L.cols),
+          x: b.left + (r.x + L.w / 2) * S.scale, y: b.top + (r.y + L.h / 2) * S.scale, w: L.w, h: L.h };
+      });
+    },
+    flip: flip
+  });
+  openMenu(false);
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,154 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="theme-color" content="#0b0f1a">
+<meta name="description" content="Snake. Swipe to steer, eat, grow, do not crash.">
+<title>Snake</title>
+<link rel="stylesheet" href="common.css">
+</head>
+<body data-game="snake" data-title="Snake" style="--acc:#3ddc84">
+<script src="common.js"></script>
+<script>
+(function () {
+  var COLS = 18, ROWS = 22, C = 20;
+  var S = NG.stage({
+    w: COLS * C, h: ROWS * C,
+    pad: [{ k: 'left', t: '◀' }, { k: 'up', t: '▲' }, { k: 'down', t: '▼' }, { k: 'right', t: '▶' }]
+  });
+  var ctx = S.ctx;
+  var DIRS = { left: [-1, 0], right: [1, 0], up: [0, -1], down: [0, 1] };
+  var snake, dir, queue, food, score, speed, eaten, acc, state = 'ready', parts = [], pulse = 0, shake = 0;
+
+  function reset() {
+    snake = [{ x: 8, y: 11 }, { x: 7, y: 11 }, { x: 6, y: 11 }];
+    dir = 'right'; queue = []; score = 0; eaten = 0; speed = 7; acc = 0; parts = []; shake = 0;
+    S.score(0);
+    placeFood();
+  }
+  function placeFood() {
+    var free = [];
+    for (var y = 0; y < ROWS; y++) for (var x = 0; x < COLS; x++) {
+      if (!snake.some(function (p) { return p.x === x && p.y === y; })) free.push({ x: x, y: y });
+    }
+    var f = NG.pick(free);
+    f.gold = eaten > 0 && eaten % 5 === 4;
+    food = f;
+  }
+  function turn(d) {
+    if (state !== 'play') return;
+    var last = queue.length ? queue[queue.length - 1] : dir;
+    var a = DIRS[last], b = DIRS[d];
+    if (a[0] + b[0] === 0 && a[1] + b[1] === 0) return;
+    if (d === last) return;
+    if (queue.length < 2) queue.push(d);
+  }
+  function burst(x, y, color) {
+    for (var i = 0; i < 12; i++) {
+      var a = Math.random() * 6.28, s = NG.rand(30, 120);
+      parts.push({ x: x, y: y, vx: Math.cos(a) * s, vy: Math.sin(a) * s, t: 0.5, c: color });
+    }
+  }
+  function move() {
+    if (queue.length) dir = queue.shift();
+    var d = DIRS[dir], h = snake[0];
+    var n = { x: h.x + d[0], y: h.y + d[1] };
+    var dead = n.x < 0 || n.y < 0 || n.x >= COLS || n.y >= ROWS;
+    for (var i = 0; i < snake.length - 1 && !dead; i++) if (snake[i].x === n.x && snake[i].y === n.y) dead = true;
+    if (dead) return die();
+    snake.unshift(n);
+    if (n.x === food.x && n.y === food.y) {
+      var gain = food.gold ? 5 : 1;
+      score += gain; eaten++;
+      burst(n.x * C + C / 2, n.y * C + C / 2, food.gold ? '#ffd24a' : '#ff5d6c');
+      NG.snd(food.gold ? 'coin' : 'eat');
+      S.score(score);
+      speed = Math.min(15, 7 + Math.floor(eaten / 4));
+      placeFood();
+    } else snake.pop();
+  }
+  function die() {
+    state = 'over'; shake = 0.3; NG.snd('hit'); NG.buzz(60);
+    setTimeout(function () {
+      NG.over({ score: score, lines: ['Length ' + snake.length], again: start });
+    }, 500);
+  }
+  function start() { reset(); state = 'play'; }
+
+  NG.input(function (k, down) {
+    if (!down) return;
+    if (DIRS[k]) turn(k);
+  });
+  NG.swipe(S.cv, function (d) { turn(d); }, { min: 18 });
+
+  function update(dt) {
+    pulse += dt;
+    for (var i = parts.length - 1; i >= 0; i--) {
+      var p = parts[i]; p.t -= dt; p.x += p.vx * dt; p.y += p.vy * dt;
+      if (p.t <= 0) parts.splice(i, 1);
+    }
+    if (shake > 0) shake -= dt;
+    if (state !== 'play') return;
+    acc += dt;
+    var every = 1 / speed;
+    while (acc >= every) { acc -= every; move(); if (state !== 'play') break; }
+  }
+
+  function cell(x, y, color, inset, r) {
+    NG.rr(ctx, x * C + inset, y * C + inset, C - inset * 2, C - inset * 2, r);
+    ctx.fillStyle = color; ctx.fill();
+  }
+  function draw() {
+    ctx.save();
+    if (shake > 0) ctx.translate(NG.rand(-3, 3), NG.rand(-3, 3));
+    S.clear('#0d1424');
+    for (var y = 0; y < ROWS; y++) for (var x = 0; x < COLS; x++) {
+      if ((x + y) % 2 === 0) { ctx.fillStyle = '#10192c'; ctx.fillRect(x * C, y * C, C, C); }
+    }
+    if (food) {
+      var s = 2 + Math.sin(pulse * 8) * 1.2;
+      cell(food.x, food.y, food.gold ? '#ffd24a' : '#ff5d6c', s, 7);
+      if (!food.gold) { ctx.fillStyle = '#3ddc84'; ctx.fillRect(food.x * C + C / 2 - 1, food.y * C + 1, 2, 4); }
+    }
+    for (var i = snake.length - 1; i >= 0; i--) {
+      var p = snake[i], k = 1 - i / (snake.length + 6);
+      var g = Math.round(120 + 100 * k);
+      cell(p.x, p.y, 'rgb(40,' + g + ',' + Math.round(80 * k + 40) + ')', i === 0 ? 0.5 : 1.2, 6);
+    }
+    if (snake.length) {
+      var h = snake[0], d = DIRS[dir], cx = h.x * C + C / 2, cy = h.y * C + C / 2;
+      var px = -d[1], py = d[0];
+      ctx.fillStyle = '#fff';
+      [-1, 1].forEach(function (sd) {
+        ctx.beginPath(); ctx.arc(cx + d[0] * 3 + px * 4 * sd, cy + d[1] * 3 + py * 4 * sd, 2.6, 0, 6.3); ctx.fill();
+      });
+      ctx.fillStyle = '#0b0f1a';
+      [-1, 1].forEach(function (sd) {
+        ctx.beginPath(); ctx.arc(cx + d[0] * 4 + px * 4 * sd, cy + d[1] * 4 + py * 4 * sd, 1.2, 0, 6.3); ctx.fill();
+      });
+    }
+    parts.forEach(function (p) {
+      ctx.globalAlpha = Math.max(0, p.t * 2); ctx.fillStyle = p.c; ctx.fillRect(p.x - 2, p.y - 2, 4, 4);
+    });
+    ctx.globalAlpha = 1;
+    ctx.restore();
+  }
+
+  reset();
+  var loop = NG.loop(update, draw);
+  loop.start();
+  NG.expose({
+    score: function () { return score; },
+    state: function () { return state; },
+    turn: turn,
+    length: function () { return snake.length; }
+  });
+  NG.intro({ lines: ['Swipe anywhere, or use the arrows, to steer.', 'Eat the apples. Gold ones are worth 5.', 'Do not hit a wall or yourself.'], fn: start });
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,511 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="theme-color" content="#0b0f1a">
+<meta name="description" content="Mines. Find the safe squares and flag the mines.">
+<title>Mines</title>
+<link rel="stylesheet" href="common.css">
+<style>
+.btn.primary{color:#0b0f1a}
+.chips{display:flex;margin:14px -3px 4px}
+.chip{flex:1 1 0;margin:0 3px;height:46px;line-height:44px;border-radius:13px;background:var(--panel2);border:1px solid rgba(255,255,255,.1);font-weight:700;font-size:15px;text-align:center;color:var(--fg)}
+.chip.on{background:var(--acc);border-color:transparent;color:#0b0f1a}
+.ov p.dinfo{min-height:40px;margin-top:6px;color:var(--fg)}
+.gb{flex:1 1 0;max-width:150px;height:48px;margin:0 5px;border-radius:14px;background:var(--panel2);border:1px solid rgba(255,255,255,.09);font-weight:700;font-size:15px;color:var(--fg);touch-action:manipulation}
+.gb.on{background:var(--acc);color:#0b0f1a}
+.gb.tog{flex:1.5 1 0;max-width:210px;background:#27325a;border-color:rgba(108,140,255,.55)}
+.gb.tog:before{content:"\26CF\FE0F ";font-size:17px}
+.gb.tog.flag{background:var(--acc);color:#0b0f1a;border-color:transparent}
+.gb.tog.flag:before{content:"\1F6A9 "}
+.stars{color:#ffc857;font-size:30px;letter-spacing:4px}
+@media (max-width:359px){#bar .ttl{display:none}#bar .stats{margin-left:auto}#bar .stat{margin-left:9px}}
+@media (max-height:520px){
+  .ov{padding:8px}
+  .ov .card{padding:12px 16px 10px;border-radius:18px}
+  .ov h2{font-size:21px;margin:0 0 2px}
+  .ov .big{font-size:36px;margin:0}
+  .ov p{font-size:13px;margin:2px 0;line-height:1.3}
+  .ov .btns{margin-top:8px}
+  .btn{height:42px;line-height:42px;margin-top:6px;font-size:15px}
+  .chips{margin:8px -3px 2px}
+  .chip{height:40px;line-height:38px}
+  .ov p.dinfo{min-height:34px;margin-top:4px}
+  .stars{font-size:22px}
+}
+@media (orientation:landscape) and (max-height:520px){
+  #app #pad{position:absolute;right:calc(var(--safe-r) + 8px);top:calc(var(--safe-t) + 58px);bottom:8px;width:104px;flex-direction:column;padding:0}
+  #app #stage.flush{padding:0 118px 0 0}
+  .gb{flex:none;width:100%;max-width:none;margin:5px 0}
+  .gb.tog{height:60px}
+  .ov .btns{display:flex;margin:8px -3px 0}
+  .ov .btns .btn{flex:1 1 0;margin:0 3px;padding:0 2px;font-size:14px;white-space:nowrap}
+}
+</style>
+</head>
+<body data-game="mines" data-title="Mines" style="--acc:#6c8cff">
+<script src="common.js"></script>
+<script>
+(function () {
+  'use strict';
+  var S = NG.stage({
+    fill: true, flush: true,
+    stats: [['mines', 'Mines', '10'], ['time', 'Time', '0:00'], ['best', 'Best', '–']]
+  });
+  var ctx = S.ctx;
+
+  var DIFFS = {
+    easy:   { name: 'Easy',   cols: 9,  rows: 9,  mines: 10, desc: '9 × 9 squares, 10 mines' },
+    medium: { name: 'Medium', cols: 12, rows: 12, mines: 24, desc: '12 × 12 squares, 24 mines' }
+  };
+  var ORDER = ['easy', 'medium'];
+  var NUMC = [null, '#5b9dff', '#4cd964', '#ff5d6c', '#b18cff', '#ff9f43', '#35d0c4', '#f2f4ff', '#9aa3b8'];
+  var HOLD = 0.4;
+
+  var diff = 'easy', sel = 'easy';
+  try { var sd = NG.store.get('ng:mines:diff'); if (sd && DIFFS[sd]) { diff = sd; sel = sd; } } catch (e) { /* default */ }
+
+  var state = 'ready', mode = 'dig';
+  var cols = 9, rows = 9, N = 81, nMines = 10;
+  var mine = [], adj = [], st = [], rt = [], ft = [], mrev = [], wrong = [], nope = [], nbrs = [];
+  var first = true, started = false, elapsed = 0, finalSecs = 0, shownS = -1, flags = 0, opened = 0, exploded = -1, won = false;
+  var clock = 0, parts = [], press = null, shake = 0, overT = 0, kbd = false, cur = 0;
+  var cs = 30, ox = 0, oy = 0;
+
+  /* ---------- best times: one per difficulty ---------- */
+  function bestKey(d) { return 'ng:mines:best:' + d; }
+  function getBest(d) {
+    var v = NG.store.get(bestKey(d)), n = Number(v);
+    return v !== null && isFinite(n) && n > 0 ? n : 0;
+  }
+  function fmt(s) { s = Math.max(0, Math.floor(s)); var m = Math.floor(s / 60), r = s % 60; return m + ':' + (r < 10 ? '0' : '') + r; }
+  function bestText(d) { var b = getBest(d); return b ? fmt(b) : '–'; }
+
+  /* ---------- the board ---------- */
+  function computeAdj() {
+    for (var i = 0; i < N; i++) {
+      var n = 0, ns = nbrs[i];
+      for (var k = 0; k < ns.length; k++) n += mine[ns[k]];
+      adj[i] = n;
+    }
+  }
+  function deal() {
+    var d = DIFFS[diff];
+    cols = d.cols; rows = d.rows; N = cols * rows; nMines = d.mines;
+    mine = []; adj = []; st = []; rt = []; ft = []; mrev = []; wrong = []; nope = []; nbrs = [];
+    var i, x, y;
+    for (i = 0; i < N; i++) {
+      mine.push(0); adj.push(0); st.push(0); rt.push(0); ft.push(-9); mrev.push(1e9); wrong.push(0); nope.push(0);
+      x = i % cols; y = Math.floor(i / cols);
+      var ns = [];
+      for (var dy = -1; dy <= 1; dy++) for (var dx = -1; dx <= 1; dx++) {
+        if (!dx && !dy) continue;
+        var nx = x + dx, ny = y + dy;
+        if (nx >= 0 && ny >= 0 && nx < cols && ny < rows) ns.push(ny * cols + nx);
+      }
+      nbrs.push(ns);
+    }
+    var order = [];
+    for (i = 0; i < N; i++) order.push(i);
+    NG.shuffle(order);
+    for (i = 0; i < nMines; i++) mine[order[i]] = 1;
+    computeAdj();
+    first = true; started = false; elapsed = 0; finalSecs = 0; shownS = -1; flags = 0; opened = 0; exploded = -1; won = false;
+    parts = []; press = null; shake = 0; overT = 0; cur = Math.floor(N / 2);
+    S.stat('mines', nMines); S.stat('time', '0:00'); S.stat('best', bestText(diff));
+    computeLayout();
+  }
+  // The first dig is always safe: mines on that square and the 8 around it move elsewhere.
+  function relocate(i) {
+    var zone = {}, k, j;
+    zone[i] = true;
+    for (k = 0; k < nbrs[i].length; k++) zone[nbrs[i][k]] = true;
+    var free = [];
+    for (j = 0; j < N; j++) if (!zone[j] && !mine[j]) free.push(j);
+    NG.shuffle(free);
+    var moved = false;
+    for (j in zone) {
+      if (zone.hasOwnProperty(j) && mine[j]) {
+        mine[j] = 0; mine[free.pop()] = 1; moved = true;
+      }
+    }
+    if (moved) computeAdj();
+  }
+  function computeLayout() {
+    var m = 2;
+    cs = Math.floor(Math.min((S.W - 2 * m) / cols, (S.H - 2 * m) / rows));
+    cs = NG.clamp(cs, 10, 58);
+    ox = Math.floor((S.W - cs * cols) / 2); oy = Math.floor((S.H - cs * rows) / 2);
+  }
+  S.onresize = function () { if (N) computeLayout(); };
+  function cellAt(x, y) {
+    var cx = Math.floor((x - ox) / cs), cy = Math.floor((y - oy) / cs);
+    if (cx < 0 || cy < 0 || cx >= cols || cy >= rows) return -1;
+    return cy * cols + cx;
+  }
+  function center(i) { return { x: ox + (i % cols + 0.5) * cs, y: oy + (Math.floor(i / cols) + 0.5) * cs }; }
+
+  /* ---------- rules ---------- */
+  function setMinesStat() { S.stat('mines', nMines - flags); }
+  function burst(x, y, n, colors, speed) {
+    for (var k = 0; k < n; k++) {
+      var a = Math.random() * 6.283, sp = NG.rand(speed * 0.3, speed);
+      parts.push({ x: x, y: y, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp - speed * 0.2, t: NG.rand(0.5, 0.95), c: NG.pick(colors), r: NG.rand(2, 4.5), s: Math.random() * 6 });
+    }
+  }
+  function flood(start) {
+    var q = [start], dep = [0], h = 0;
+    st[start] = 1; rt[start] = clock; opened++;
+    while (h < q.length) {
+      var c = q[h], dp = dep[h]; h++;
+      if (adj[c] !== 0) continue;
+      var ns = nbrs[c];
+      for (var k = 0; k < ns.length; k++) {
+        var j = ns[k];
+        if (st[j] === 0 && !mine[j]) { st[j] = 1; rt[j] = clock + (dp + 1) * 0.035; opened++; q.push(j); dep.push(dp + 1); }
+      }
+    }
+    return q.length;
+  }
+  function dig(i) {
+    if (st[i] !== 0) return;
+    if (first) { first = false; started = true; relocate(i); }
+    if (mine[i]) { lose(i); return; }
+    var n = flood(i);
+    NG.snd(n > 1 ? 'pop' : 'tap');
+    if (n > 6) NG.beep(300, 0.18, 'sine', 0.05, 700);
+    checkWin();
+  }
+  function toggleFlag(i) {
+    if (st[i] === 0) { st[i] = 2; flags++; ft[i] = clock; NG.beep(760, 0.07, 'triangle', 0.08, 980); }
+    else if (st[i] === 2) { st[i] = 0; flags--; ft[i] = clock; NG.beep(420, 0.06, 'triangle', 0.06, 300); }
+    setMinesStat();
+  }
+  function chord(i) {
+    var ns = nbrs[i], f = 0, k, j;
+    if (st[i] !== 1 || adj[i] === 0) return;
+    for (k = 0; k < ns.length; k++) if (st[ns[k]] === 2) f++;
+    if (f !== adj[i]) { nope[i] = 0.3; NG.beep(180, 0.09, 'triangle', 0.05, 140); return; }
+    var hitMine = -1, any = false;
+    for (k = 0; k < ns.length; k++) {
+      j = ns[k];
+      if (st[j] === 0) { any = true; if (mine[j] && hitMine < 0) hitMine = j; }
+    }
+    if (!any) return;
+    if (hitMine >= 0) { lose(hitMine); return; }
+    var total = 0;
+    for (k = 0; k < ns.length; k++) { j = ns[k]; if (st[j] === 0) total += flood(j); }
+    NG.snd(total > 1 ? 'pop' : 'tap');
+    checkWin();
+  }
+  // kind: 'dig' or 'flag'. Tapping a revealed number is always a chord.
+  function act(i, kind) {
+    if (state !== 'play' || i < 0 || i >= N) return false;
+    if (st[i] === 1) { chord(i); return true; }
+    if (kind === 'flag') toggleFlag(i);
+    else if (st[i] === 0) dig(i);
+    return true;
+  }
+  function checkWin() {
+    if (state !== 'play' || opened < N - nMines) return;
+    state = 'over'; won = true; finalSecs = elapsed;
+    for (var i = 0; i < N; i++) if (mine[i] && st[i] === 0) { st[i] = 2; ft[i] = clock + Math.random() * 0.4; }
+    flags = nMines; setMinesStat();
+    var cols2 = ['#6c8cff', '#3ddc84', '#ffd24a', '#ff7eb6', '#ffffff'];
+    for (var k = 0; k < 5; k++) burst(NG.rand(S.W * 0.15, S.W * 0.85), NG.rand(S.H * 0.2, S.H * 0.6), 18, cols2, 260);
+    NG.snd('line'); NG.buzz(30);
+    overT = 1.1;
+  }
+  function lose(i) {
+    state = 'over'; won = false; exploded = i; finalSecs = elapsed; shake = 0.45; overT = 1.5;
+    var c = center(i), ex = i % cols, ey = Math.floor(i / cols);
+    for (var j = 0; j < N; j++) {
+      if (mine[j] && st[j] !== 2) mrev[j] = clock + 0.12 + Math.sqrt(Math.pow(j % cols - ex, 2) + Math.pow(Math.floor(j / cols) - ey, 2)) * 0.07;
+      else if (!mine[j] && st[j] === 2) { wrong[j] = 1; mrev[j] = clock + 0.12; }
+    }
+    burst(c.x, c.y, 26, ['#ff5d6c', '#ffb454', '#ffd24a', '#ffffff'], 240);
+    NG.snd('hit'); NG.buzz(70);
+  }
+
+  /* ---------- game over ---------- */
+  function finish(o) {
+    var gk = 'ng:mines:best', pb = getBest(diff);
+    // NG.over keeps one best score under one key: point that key at this difficulty's best first
+    try { if (pb > 0) NG.store.set(gk, String(pb)); else window.localStorage.removeItem(gk); } catch (e) { /* ignore */ }
+    NG.over(o);
+    var nb = Number(NG.store.get(gk));
+    if (isFinite(nb) && nb > 0 && (pb === 0 || nb < pb)) NG.store.set(bestKey(diff), String(nb));
+    var all = 0;
+    ORDER.forEach(function (k) { var b = getBest(k); if (b && (!all || b < all)) all = b; });
+    if (all) NG.store.set(gk, String(all));
+    S.stat('best', bestText(diff));
+  }
+  function showWin() {
+    finish({
+      score: Math.max(1, Math.floor(finalSecs)), lower: true, win: true, title: 'Cleared!', format: fmt,
+      lines: [DIFFS[diff].name + ': ' + nMines + ' mines found'], again: start
+    });
+  }
+  function showLose() {
+    var safe = N - nMines, pct = Math.floor(opened * 100 / safe);
+    NG.over({
+      score: pct, noBest: true, title: 'Boom!', format: function (v) { return v + '%'; },
+      lines: ['Cleared ' + opened + ' of ' + safe + ' safe squares', 'Time ' + fmt(finalSecs)], again: start
+    });
+  }
+
+  function start() {
+    NG.closeDialog();
+    diff = sel;
+    NG.store.set('ng:mines:diff', diff);
+    deal();
+    state = 'play';
+  }
+
+  /* ---------- menu ---------- */
+  function openMenu(inProgress) {
+    press = null;
+    if (inProgress) state = 'ready';              // freezes the game while the menu is open
+    var btns = [{ t: 'Play', primary: true, fn: start }];
+    if (inProgress) btns.push({ t: 'Keep playing', fn: function () { state = 'play'; } });
+    var ov = NG.dialog({
+      title: 'Mines',
+      lines: ['Tap to dig. A number counts the mines next to it.', 'Hold, or switch to Flag, to mark a mine.', 'Tap a number with all its flags to open around it.'],
+      buttons: btns
+    });
+    var card = ov.querySelector('.card'), bt = ov.querySelector('.btns');
+    var chips = NG.el('div', 'chips'), info = NG.el('p', 'dinfo', ''), els = {};
+    function refresh() {
+      ORDER.forEach(function (k) { els[k].className = 'chip' + (k === sel ? ' on' : ''); });
+      var b = getBest(sel);
+      info.innerHTML = DIFFS[sel].desc + '<br><span style="color:var(--muted)">' + (b ? 'Best time ' + fmt(b) : 'No best time yet') + '</span>';
+    }
+    ORDER.forEach(function (k) {
+      var b = NG.el('button', 'chip', DIFFS[k].name); b.setAttribute('type', 'button'); els[k] = b;
+      b.addEventListener('click', function () {
+        sel = k; NG.snd('tap'); refresh();
+        if (!inProgress) { diff = sel; deal(); }      // show the new board behind the menu
+      });
+      chips.appendChild(b);
+    });
+    card.insertBefore(chips, bt); card.insertBefore(info, bt);
+    refresh();
+  }
+
+  /* ---------- pad ---------- */
+  function padBtn(text, label, cls, fn) {
+    var b = NG.el('button', 'gb' + (cls ? ' ' + cls : ''), text);
+    b.setAttribute('type', 'button'); b.setAttribute('aria-label', label);
+    b.addEventListener('pointerdown', function () { b.classList.add('on'); });
+    ['pointerup', 'pointercancel', 'pointerleave'].forEach(function (n) { b.addEventListener(n, function () { b.classList.remove('on'); }); });
+    b.addEventListener('click', function () { NG.snd('tap'); fn(); });
+    S.pad.appendChild(b);
+    return b;
+  }
+  var togBtn = padBtn('Dig', 'Switch between dig and flag', 'tog', function () { setMode(mode === 'dig' ? 'flag' : 'dig'); });
+  function setMode(m) {
+    mode = m === 'flag' ? 'flag' : 'dig';
+    togBtn.textContent = mode === 'flag' ? 'Flag' : 'Dig';
+    togBtn.className = 'gb tog' + (mode === 'flag' ? ' flag' : '');
+  }
+  padBtn('New game', 'New game', '', function () { start(); });
+  padBtn('Level', 'Change level', '', function () { openMenu(state === 'play' && started); });
+
+  /* ---------- input: tap, hold, keys ---------- */
+  function other(k) { return k === 'dig' ? 'flag' : 'dig'; }
+  S.cv.addEventListener('pointerdown', function (e) {
+    if (state !== 'play' || press) return;
+    var p = S.pos(e), i = cellAt(p.x, p.y);
+    if (i < 0) return;
+    kbd = false;
+    press = { id: e.pointerId, i: i, t: 0, fired: false, cancel: false, x: e.clientX, y: e.clientY };
+    try { S.cv.setPointerCapture(e.pointerId); } catch (x) { /* ignore */ }
+  });
+  S.cv.addEventListener('pointermove', function (e) {
+    if (!press || e.pointerId !== press.id) return;
+    var dx = e.clientX - press.x, dy = e.clientY - press.y;
+    if (dx * dx + dy * dy > 144) press.cancel = true;     // the finger slid away: no tap, no hold
+  });
+  S.cv.addEventListener('pointerup', function (e) {
+    if (!press || e.pointerId !== press.id) return;
+    var pr = press; press = null;
+    if (!pr.fired && !pr.cancel) act(pr.i, mode);
+  });
+  S.cv.addEventListener('pointercancel', function (e) { if (press && e.pointerId === press.id) press = null; });
+  NG.input(function (k, down) {
+    if (!down || state !== 'play') return;
+    var x = cur % cols, y = Math.floor(cur / cols);
+    if (k === 'left' || k === 'right' || k === 'up' || k === 'down') {
+      kbd = true;
+      if (k === 'left') x = Math.max(0, x - 1); else if (k === 'right') x = Math.min(cols - 1, x + 1);
+      else if (k === 'up') y = Math.max(0, y - 1); else y = Math.min(rows - 1, y + 1);
+      cur = y * cols + x;
+    } else if (k === 'act') { kbd = true; act(cur, 'dig'); }
+    else if (k === 'act2') { kbd = true; act(cur, 'flag'); }
+  });
+
+  /* ---------- update ---------- */
+  function update(dt) {
+    clock += dt;
+    var i, p;
+    for (i = parts.length - 1; i >= 0; i--) {
+      p = parts[i]; p.t -= dt; p.x += p.vx * dt; p.y += p.vy * dt; p.vy += 420 * dt; p.vx *= 0.99;
+      if (p.t <= 0) parts.splice(i, 1);
+    }
+    if (shake > 0) shake -= dt;
+    for (i = 0; i < nope.length; i++) if (nope[i] > 0) nope[i] -= dt;
+    if (state === 'ready') return;                  // menu open: the game is frozen
+    if (state === 'play' && started) elapsed += dt;
+    var s = Math.floor(elapsed);
+    if (s !== shownS) { shownS = s; S.stat('time', fmt(s)); }
+    if (press && !press.fired && !press.cancel && state === 'play') {
+      press.t += dt;
+      if (press.t >= HOLD) { press.fired = true; NG.buzz(18); act(press.i, other(mode)); }
+    }
+    if (state === 'over' && overT > 0) {
+      overT -= dt;
+      if (overT <= 0) { if (won) showWin(); else showLose(); }
+    }
+  }
+
+  /* ---------- drawing ---------- */
+  function easeOut(t) { return 1 - Math.pow(1 - t, 3); }
+  function drawFlag(cx, cy, s, k) {
+    ctx.save(); ctx.translate(cx, cy); ctx.scale(k, k);
+    ctx.fillStyle = '#1a2142';
+    NG.rr(ctx, -s * 0.2, s * 0.17, s * 0.4, s * 0.08, s * 0.03); ctx.fill();
+    ctx.fillStyle = '#eef2ff';
+    ctx.fillRect(-s * 0.04, -s * 0.28, s * 0.07, s * 0.47);
+    ctx.fillStyle = '#ff4d5e';
+    ctx.beginPath(); ctx.moveTo(-s * 0.04, -s * 0.28); ctx.lineTo(s * 0.27, -s * 0.14); ctx.lineTo(-s * 0.04, 0); ctx.closePath(); ctx.fill();
+    ctx.restore();
+  }
+  function drawMine(cx, cy, s, body, spark) {
+    ctx.strokeStyle = body; ctx.lineWidth = Math.max(1.5, s * 0.07); ctx.lineCap = 'round';
+    for (var k = 0; k < 4; k++) {
+      var a = k * Math.PI / 4;
+      ctx.beginPath();
+      ctx.moveTo(cx - Math.cos(a) * s * 0.3, cy - Math.sin(a) * s * 0.3);
+      ctx.lineTo(cx + Math.cos(a) * s * 0.3, cy + Math.sin(a) * s * 0.3);
+      ctx.stroke();
+    }
+    ctx.fillStyle = body;
+    ctx.beginPath(); ctx.arc(cx, cy, s * 0.2, 0, 6.3); ctx.fill();
+    ctx.fillStyle = spark;
+    ctx.beginPath(); ctx.arc(cx - s * 0.07, cy - s * 0.07, s * 0.06, 0, 6.3); ctx.fill();
+  }
+  function tile(x, y, w, h, i, lit) {
+    var r = Math.max(3, cs * 0.17);
+    NG.rr(ctx, x, y, w, h, r);
+    ctx.fillStyle = (i % cols + Math.floor(i / cols)) % 2 === 0 ? '#4a63cc' : '#4059c0';
+    ctx.fill();
+    NG.rr(ctx, x + 1.2, y + 1.2, w - 2.4, h * 0.42, r * 0.8);
+    ctx.fillStyle = 'rgba(255,255,255,.14)'; ctx.fill();
+    if (lit) { NG.rr(ctx, x, y, w, h, r); ctx.fillStyle = 'rgba(255,255,255,.26)'; ctx.fill(); }
+  }
+  function drawCell(i) {
+    var x = ox + (i % cols) * cs + 1, y = oy + Math.floor(i / cols) * cs + 1, w = cs - 2, h = cs - 2;
+    var cx = x + w / 2, cy = y + h / 2, r = Math.max(3, cs * 0.17);
+    var over = state === 'over';
+    var shown = (st[i] === 1 && clock >= rt[i]) || (over && !won && ((mine[i] && st[i] !== 2) || i === exploded) && clock >= mrev[i]) || (i === exploded);
+    var wrongFlag = over && !won && wrong[i] && clock >= mrev[i];
+    var t, sh = 0;
+    if (nope[i] > 0) sh = Math.sin(nope[i] * 60) * 2;
+    if (wrongFlag) shown = true;
+    if (shown) {
+      NG.rr(ctx, x, y, w, h, r);
+      ctx.fillStyle = i === exploded ? '#ff5d6c' : '#131b31'; ctx.fill();
+      var age = st[i] === 1 ? (clock - rt[i]) / 0.2 : (clock - mrev[i]) / 0.2;
+      t = NG.clamp(age, 0, 1);
+      if (t < 1 && i !== exploded) {                // the tile shrinks away
+        var k = 1 - easeOut(t);
+        tile(cx - w * k / 2, cy - h * k / 2, w * k, h * k, i, false);
+      }
+      var a = easeOut(t), body;
+      if (mine[i] || wrongFlag) {
+        body = i === exploded ? '#2a0a12' : '#e6eaff';
+        drawMine(cx, cy, cs * (0.7 + 0.3 * a), body, i === exploded ? '#ff9aa6' : '#ffffff');
+        if (wrongFlag) {
+          ctx.strokeStyle = '#ff5d6c'; ctx.lineWidth = Math.max(2, cs * 0.09); ctx.lineCap = 'round';
+          ctx.beginPath(); ctx.moveTo(cx - cs * 0.3, cy - cs * 0.3); ctx.lineTo(cx + cs * 0.3, cy + cs * 0.3);
+          ctx.moveTo(cx + cs * 0.3, cy - cs * 0.3); ctx.lineTo(cx - cs * 0.3, cy + cs * 0.3); ctx.stroke();
+        }
+      } else if (adj[i] > 0) {
+        ctx.globalAlpha = a;
+        NG.text(ctx, String(adj[i]), cx + sh, cy + cs * 0.03, cs * (0.5 + 0.12 * a), NUMC[adj[i]], 'center', '800');
+        ctx.globalAlpha = 1;
+      }
+    } else {
+      var lit = press && press.i === i && !press.cancel && !press.fired;
+      var sc = lit ? 0.92 : 1;
+      tile(cx - w * sc / 2 + sh, cy - h * sc / 2, w * sc, h * sc, i, lit);
+      if (st[i] === 2) {
+        t = NG.clamp((clock - ft[i]) / 0.25, 0, 1);
+        if (t > 0) drawFlag(cx + sh, cy, cs, 0.4 + 0.6 * (1 + 2.7 * Math.pow(t - 1, 3) + 1.7 * Math.pow(t - 1, 2)));
+      }
+      if (lit && press.t > 0.1) {                   // ring that fills while holding
+        ctx.strokeStyle = '#ffffff'; ctx.lineWidth = Math.max(2, cs * 0.09); ctx.lineCap = 'round';
+        ctx.beginPath(); ctx.arc(cx, cy, cs * 0.36, -Math.PI / 2, -Math.PI / 2 + 6.283 * Math.min(1, press.t / HOLD)); ctx.stroke();
+      }
+    }
+    if (kbd && i === cur && state === 'play') {
+      NG.rr(ctx, x - 1, y - 1, w + 2, h + 2, r + 1);
+      ctx.lineWidth = 2.5; ctx.strokeStyle = '#ffd24a'; ctx.stroke();
+    }
+  }
+  function draw() {
+    ctx.save();
+    if (shake > 0) ctx.translate(NG.rand(-4, 4) * Math.min(1, shake * 3), NG.rand(-4, 4) * Math.min(1, shake * 3));
+    S.clear('#0b1020');
+    NG.rr(ctx, ox - 2, oy - 2, cs * cols + 4, cs * rows + 4, 8);
+    ctx.fillStyle = '#0f1630'; ctx.fill();
+    for (var i = 0; i < N; i++) drawCell(i);
+    for (var j = 0; j < parts.length; j++) {
+      var p = parts[j];
+      ctx.globalAlpha = Math.max(0, Math.min(1, p.t * 2.2));
+      ctx.fillStyle = p.c;
+      ctx.save(); ctx.translate(p.x, p.y); ctx.rotate(p.s + p.t * 7);
+      ctx.fillRect(-p.r, -p.r, p.r * 2, p.r * 2);
+      ctx.restore();
+    }
+    ctx.globalAlpha = 1;
+    ctx.restore();
+  }
+
+  /* ---------- go ---------- */
+  deal();
+  var loop = NG.loop(update, draw);
+  loop.start();
+  NG.expose({
+    score: function () { return won ? Math.max(1, Math.floor(finalSecs)) : Math.floor(elapsed); },
+    state: function () { return state; },
+    won: function () { return won; },
+    diff: function () { return diff; },
+    mode: function () { return mode; },
+    setMode: setMode,
+    minesLeft: function () { return nMines - flags; },
+    opened: function () { return opened; },
+    time: function () { return elapsed; },
+    best: function () { return getBest(diff); },
+    dig: function (i) { return act(i, 'dig'); },
+    flag: function (i) { return act(i, 'flag'); },
+    chord: function (i) { return act(i, 'dig'); },
+    // the whole board: size, and per cell: mine, number, state, and the centre in page coordinates (to tap it)
+    board: function () {
+      var b = S.cv.getBoundingClientRect(), cells = [];
+      for (var i = 0; i < N; i++) {
+        var c = center(i);
+        cells.push({ i: i, col: i % cols, row: Math.floor(i / cols), mine: !!mine[i], n: adj[i], state: st[i] === 1 ? 'open' : st[i] === 2 ? 'flag' : 'hidden', x: b.left + c.x * S.scale, y: b.top + c.y * S.scale });
+      }
+      return { cols: cols, rows: rows, mines: nMines, cell: cs, firstDig: first, cells: cells };
+    }
+  });
+  openMenu(false);
+})();
+</script>
+</body>
+</html>

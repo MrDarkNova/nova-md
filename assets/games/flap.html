@@ -1,0 +1,319 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="theme-color" content="#0b0f1a">
+<meta name="description" content="Flap. Tap to flap through the gaps.">
+<title>Flap</title>
+<link rel="stylesheet" href="common.css">
+<style>.btn.primary{color:#3a2a00}</style>
+</head>
+<body data-game="flap" data-title="Flap" style="--acc:#ffd24a">
+<script src="common.js"></script>
+<script>
+(function () {
+  'use strict';
+  var W = 360, H = 560, GH = 72, FLOOR = H - GH;
+  var BX = 104, BR = 13, HITR = 11.5;           // bird x, drawn radius, forgiving hit radius
+  var GRAV = 1500, FLAP = -430, MAXFALL = 640;  // px/s^2, px/s, px/s
+  var PIPE_W = 58, CAP_H = 22, CAP_X = 4;
+  var S = NG.stage({ w: W, h: H });
+  var ctx = S.ctx;
+
+  /* sky tiers: day, sunset, night (a new one every 10 points) */
+  var SKY = [
+    { t: [92, 190, 255], b: [214, 242, 255], far: [150, 214, 190], near: [96, 190, 120], cloud: [255, 255, 255] },
+    { t: [255, 138, 102], b: [255, 224, 160], far: [214, 138, 130], near: [166, 110, 120], cloud: [255, 226, 214] },
+    { t: [22, 34, 82], b: [86, 98, 170], far: [48, 58, 112], near: [34, 44, 86], cloud: [120, 130, 190] }
+  ];
+  function mixc(a, b, f) {
+    return 'rgb(' + Math.round(a[0] + (b[0] - a[0]) * f) + ',' + Math.round(a[1] + (b[1] - a[1]) * f) + ',' + Math.round(a[2] + (b[2] - a[2]) * f) + ')';
+  }
+
+  var state = 'ready', started = false, score = 0, t = 0, idle = 0, scroll = 0, skyF = 0;
+  var bird = { y: H * 0.42, vy: 0, rot: 0, flapT: 0 };
+  var pipes = [], parts = [], clouds = [], stars = [];
+  var flash = 0, shake = 0, overT = 0, dialogShown = false, popT = 0;
+
+  (function seed() {
+    var i;
+    for (i = 0; i < 5; i++) clouds.push({ x: NG.rand(0, W), y: NG.rand(40, 260), s: NG.rand(0.7, 1.4), v: NG.rand(5, 14) });
+    for (i = 0; i < 40; i++) stars.push({ x: NG.rand(0, W), y: NG.rand(0, FLOOR - 40), r: NG.rand(0.6, 1.6), p: NG.rand(0, 6) });
+  })();
+
+  function speed() { return Math.min(190, 135 + score * 2.5); }
+  function gapSize() { return Math.max(130, 168 - score * 1.5); }
+  function spacing() { return Math.max(212, speed() * 1.5); }
+
+  function spawnPipe() {
+    var g = gapSize(), lo = 44 + g / 2, hi = FLOOR - 44 - g / 2, c;
+    if (!pipes.length) c = (lo + hi) / 2 + NG.rand(-60, 60);
+    else {
+      var prev = pipes[pipes.length - 1].c;
+      c = NG.clamp(prev + NG.rand(-140, 170), lo, hi);   // never a jump the bird cannot make in time
+    }
+    pipes.push({ x: W + 12, c: c, g: g, passed: false });
+  }
+
+  function reset() {
+    state = 'ready'; started = false; score = 0; idle = 0; scroll = 0; skyF = 0; overT = 0; dialogShown = false;
+    bird.y = H * 0.42; bird.vy = 0; bird.rot = 0; bird.flapT = 0;
+    pipes = []; parts = []; flash = 0; shake = 0; popT = 0;
+    S.score(0);
+  }
+  function start() { reset(); state = 'play'; }
+
+  function puff(x, y, n, col, spd) {
+    for (var i = 0; i < n; i++) {
+      var a = NG.rand(0, 6.28), s = NG.rand(20, spd || 90);
+      parts.push({ x: x, y: y, vx: Math.cos(a) * s, vy: Math.sin(a) * s, t: NG.rand(0.3, 0.6), c: col, r: NG.rand(1.5, 3.2) });
+    }
+  }
+
+  function flap() {
+    if (state !== 'play') return;
+    started = true;
+    bird.vy = FLAP; bird.flapT = 0.28;
+    NG.beep(430, 0.09, 'triangle', 0.07, 700);
+    puff(BX - 10, bird.y + 6, 3, 'rgba(255,255,255,.8)', 50);
+  }
+
+  function hit() {
+    if (state !== 'play') return;
+    state = 'over'; flash = 1; shake = 0.28; overT = 0;
+    bird.vy = Math.min(bird.vy, -140);
+    NG.snd('hit'); NG.buzz(50);
+    puff(BX, bird.y, 14, '#ffd24a', 170);
+  }
+
+  function showDialog() {
+    dialogShown = true;
+    var medal = score >= 30 ? '🥇 Gold medal!' : score >= 20 ? '🥈 Silver medal!' : score >= 10 ? '🥉 Bronze medal!' : 'Reach 10 for a bronze medal.';
+    NG.over({ score: score, lines: [medal], again: start });
+  }
+
+  function circleRect(cx, cy, r, x, y, w, h) {
+    var nx = NG.clamp(cx, x, x + w), ny = NG.clamp(cy, y, y + h);
+    var dx = cx - nx, dy = cy - ny;
+    return dx * dx + dy * dy < r * r;
+  }
+
+  function update(dt) {
+    var i;
+    t += dt;
+    popT = Math.max(0, popT - dt);
+    flash = Math.max(0, flash - dt * 3.2);
+    shake = Math.max(0, shake - dt);
+    bird.flapT = Math.max(0, bird.flapT - dt);
+    skyF += (Math.floor(score / 10) - skyF) * Math.min(1, dt * 1.1);
+    for (i = 0; i < clouds.length; i++) {
+      var c = clouds[i]; c.x -= c.v * dt;
+      if (c.x < -90) { c.x = W + 60; c.y = NG.rand(40, 260); }
+    }
+    for (i = parts.length - 1; i >= 0; i--) {
+      var p = parts[i]; p.t -= dt; p.x += p.vx * dt; p.y += p.vy * dt; p.vy += 260 * dt;
+      if (p.t <= 0) parts.splice(i, 1);
+    }
+
+    if (state === 'ready') { bird.y = H * 0.42; bird.rot = 0; scroll += 60 * dt; return; }
+
+    if (state === 'over') {
+      overT += dt;
+      bird.vy = Math.min(MAXFALL, bird.vy + GRAV * dt);
+      bird.y = Math.min(FLOOR - BR + 2, bird.y + bird.vy * dt);
+      bird.rot += (1.5 - bird.rot) * Math.min(1, dt * 8);
+      if (!dialogShown && overT > 0.75) showDialog();
+      return;
+    }
+
+    /* state === 'play' */
+    if (!started) {
+      idle += dt;
+      bird.y = H * 0.42 + Math.sin(t * 5) * 9; bird.vy = 0; bird.rot = Math.sin(t * 5) * 0.08;
+      scroll += 60 * dt;
+      if (idle > 3.5) started = true;     // never wait forever
+      return;
+    }
+    var sp = speed();
+    scroll += sp * dt;
+    bird.vy = Math.min(MAXFALL, bird.vy + GRAV * dt);
+    bird.y += bird.vy * dt;
+    if (bird.y < BR) { bird.y = BR; if (bird.vy < 0) bird.vy = 0; }
+    var target = NG.clamp(bird.vy * 0.0028, -0.5, 1.15);
+    bird.rot += (target - bird.rot) * Math.min(1, dt * 12);
+
+    if (!pipes.length || pipes[pipes.length - 1].x < W + 12 - spacing()) spawnPipe();
+    for (i = pipes.length - 1; i >= 0; i--) {
+      var pp = pipes[i];
+      pp.x -= sp * dt;
+      if (pp.x + PIPE_W < -10) { pipes.splice(i, 1); continue; }
+      if (!pp.passed && pp.x + PIPE_W / 2 < BX) {
+        pp.passed = true; score++; popT = 0.25;
+        S.score(score);
+        NG.beep(score % 10 === 0 ? 880 : 660, 0.08, 'square', 0.05, score % 10 === 0 ? 1320 : 800);
+      }
+      var gt = pp.c - pp.g / 2, gb = pp.c + pp.g / 2;
+      if (circleRect(BX, bird.y, HITR, pp.x, -10, PIPE_W, gt + 10) || circleRect(BX, bird.y, HITR, pp.x, gb, PIPE_W, FLOOR - gb) ||
+          circleRect(BX, bird.y, HITR, pp.x - CAP_X, gt - CAP_H, PIPE_W + CAP_X * 2, CAP_H) || circleRect(BX, bird.y, HITR, pp.x - CAP_X, gb, PIPE_W + CAP_X * 2, CAP_H)) {
+        hit(); return;
+      }
+    }
+    if (bird.y + HITR >= FLOOR) { bird.y = FLOOR - HITR; hit(); }
+  }
+
+  /* ---------- drawing ---------- */
+  function hills(col, base, amp, f1, f2, ph, par) {
+    ctx.fillStyle = col; ctx.beginPath(); ctx.moveTo(0, FLOOR);
+    for (var x = 0; x <= W + 8; x += 8) {
+      var u = x + scroll * par;
+      ctx.lineTo(x, base - amp * (0.6 + 0.4 * Math.sin(u * f1 + ph)) - amp * 0.5 * Math.sin(u * f2 + ph * 2));
+    }
+    ctx.lineTo(W, FLOOR); ctx.closePath(); ctx.fill();
+  }
+  function cloud(x, y, s, col) {
+    ctx.fillStyle = col;
+    ctx.beginPath();
+    ctx.arc(x, y, 14 * s, 0, 6.3); ctx.arc(x + 16 * s, y - 8 * s, 18 * s, 0, 6.3);
+    ctx.arc(x + 36 * s, y, 15 * s, 0, 6.3); ctx.arc(x + 18 * s, y + 6 * s, 14 * s, 0, 6.3);
+    ctx.fill();
+  }
+  function pipe(x, y, w, h, top) {
+    var g = ctx.createLinearGradient(x, 0, x + w, 0);
+    g.addColorStop(0, '#2f9e44'); g.addColorStop(0.35, '#69db7c'); g.addColorStop(1, '#2b8a3e');
+    ctx.fillStyle = g; ctx.fillRect(x, y, w, h);
+    ctx.strokeStyle = 'rgba(10,50,20,.65)'; ctx.lineWidth = 2; ctx.strokeRect(x + 1, y + 1, w - 2, h - 2);
+  }
+  function outline(str, x, y, size, fill) {
+    ctx.font = '800 ' + size + 'px -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif';
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.lineJoin = 'round'; ctx.lineWidth = Math.max(3, size / 7);
+    ctx.strokeStyle = 'rgba(20,20,40,.75)'; ctx.strokeText(str, x, y);
+    ctx.fillStyle = fill; ctx.fillText(str, x, y);
+  }
+  function drawBird() {
+    ctx.save(); ctx.translate(BX, bird.y); ctx.rotate(bird.rot);
+    ctx.fillStyle = '#e29a10';
+    ctx.beginPath(); ctx.moveTo(-10, -1); ctx.lineTo(-21, -6); ctx.lineTo(-19, 4); ctx.closePath(); ctx.fill();
+    var g = ctx.createRadialGradient(-4, -6, 2, 0, 0, 17); g.addColorStop(0, '#ffe98a'); g.addColorStop(1, '#ffb41c');
+    ctx.fillStyle = g; ctx.beginPath(); ctx.arc(0, 0, BR + 1, 0, 6.3); ctx.fill();
+    ctx.strokeStyle = 'rgba(110,60,0,.6)'; ctx.lineWidth = 1.6; ctx.stroke();
+    ctx.fillStyle = '#fff4c9'; ctx.beginPath(); ctx.ellipse(2, 6, 8, 4.5, 0, 0, 6.3); ctx.fill();
+    var wa = bird.flapT > 0 ? Math.sin(t * 36) * 0.9 : 0.25;
+    ctx.save(); ctx.translate(-4, 2); ctx.rotate(wa);
+    ctx.fillStyle = '#f59f00'; ctx.beginPath(); ctx.ellipse(-3, 0, 9, 5, 0, 0, 6.3); ctx.fill();
+    ctx.strokeStyle = 'rgba(110,60,0,.5)'; ctx.lineWidth = 1.2; ctx.stroke();
+    ctx.restore();
+    ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.arc(6, -4, 4.4, 0, 6.3); ctx.fill();
+    ctx.strokeStyle = 'rgba(0,0,0,.35)'; ctx.lineWidth = 1; ctx.stroke();
+    if (state === 'over') {
+      ctx.strokeStyle = '#2b2b3a'; ctx.lineWidth = 1.6; ctx.beginPath();
+      ctx.moveTo(4, -6); ctx.lineTo(8, -2); ctx.moveTo(8, -6); ctx.lineTo(4, -2); ctx.stroke();
+    } else { ctx.fillStyle = '#1c1c2b'; ctx.beginPath(); ctx.arc(7.4, -4, 2, 0, 6.3); ctx.fill(); }
+    ctx.fillStyle = '#ff7a1a'; ctx.beginPath(); ctx.moveTo(11, -1); ctx.lineTo(21, 2); ctx.lineTo(11, 5.5); ctx.closePath(); ctx.fill();
+    ctx.restore();
+  }
+
+  function draw() {
+    var i, idx = Math.floor(skyF), f = skyF - idx, A = SKY[idx % 3], B = SKY[(idx + 1) % 3];
+    ctx.save();
+    if (shake > 0) ctx.translate(NG.rand(-3, 3), NG.rand(-3, 3));
+    var sg = ctx.createLinearGradient(0, 0, 0, FLOOR);
+    sg.addColorStop(0, mixc(A.t, B.t, f)); sg.addColorStop(1, mixc(A.b, B.b, f));
+    ctx.fillStyle = sg; ctx.fillRect(-10, -10, W + 20, H + 20);
+    // stars fade in with the night tier
+    var night = idx % 3 === 2 ? 1 - f : idx % 3 === 1 ? f : 0;
+    if (night > 0.02) {
+      for (i = 0; i < stars.length; i++) {
+        var st = stars[i];
+        ctx.globalAlpha = night * (0.5 + 0.5 * Math.sin(t * 2 + st.p));
+        ctx.fillStyle = '#fff'; ctx.fillRect(st.x, st.y, st.r, st.r);
+      }
+      ctx.globalAlpha = 1;
+    }
+    var cc = mixc(A.cloud, B.cloud, f);
+    ctx.globalAlpha = 0.85;
+    for (i = 0; i < clouds.length; i++) cloud(clouds[i].x, clouds[i].y, clouds[i].s, cc);
+    ctx.globalAlpha = 1;
+    hills(mixc(A.far, B.far, f), FLOOR - 60, 46, 0.011, 0.027, 1.3, 0.12);
+    hills(mixc(A.near, B.near, f), FLOOR - 14, 30, 0.017, 0.041, 0.4, 0.3);
+
+    for (i = 0; i < pipes.length; i++) {
+      var p = pipes[i], gt = p.c - p.g / 2, gb = p.c + p.g / 2;
+      pipe(p.x, -4, PIPE_W, gt + 4 - CAP_H, true);
+      pipe(p.x - CAP_X, gt - CAP_H, PIPE_W + CAP_X * 2, CAP_H, true);
+      pipe(p.x - CAP_X, gb, PIPE_W + CAP_X * 2, CAP_H, false);
+      pipe(p.x, gb + CAP_H, PIPE_W, FLOOR - gb - CAP_H, false);
+    }
+    // ground
+    ctx.fillStyle = '#d9b36b'; ctx.fillRect(0, FLOOR, W, GH);
+    ctx.fillStyle = '#c79c52';
+    var off = -(scroll % 28);
+    for (var x = off - 28; x < W + 28; x += 28) {
+      ctx.beginPath(); ctx.moveTo(x, FLOOR + 12); ctx.lineTo(x + 14, FLOOR + 12); ctx.lineTo(x + 2, H); ctx.lineTo(x - 12, H); ctx.closePath(); ctx.fill();
+    }
+    ctx.fillStyle = '#5cc24a'; ctx.fillRect(0, FLOOR, W, 12);
+    ctx.fillStyle = '#3e9a38'; ctx.fillRect(0, FLOOR + 10, W, 3);
+    ctx.fillStyle = '#7ee06a';
+    for (x = off - 28; x < W + 28; x += 28) ctx.fillRect(x, FLOOR, 14, 3);
+
+    drawBird();
+    for (i = 0; i < parts.length; i++) {
+      var q = parts[i]; ctx.globalAlpha = Math.max(0, Math.min(1, q.t * 3)); ctx.fillStyle = q.c;
+      ctx.beginPath(); ctx.arc(q.x, q.y, q.r, 0, 6.3); ctx.fill();
+    }
+    ctx.globalAlpha = 1;
+
+    var sc = 1 + popT * 1.2;
+    ctx.save(); ctx.translate(W / 2, 64); ctx.scale(sc, sc);
+    outline(String(score), 0, 0, 54, '#fff');
+    ctx.restore();
+    if (state === 'play' && !started) {
+      ctx.globalAlpha = 0.65 + 0.35 * Math.sin(t * 6);
+      outline('TAP to flap', W / 2, H * 0.62, 26, '#ffd24a');
+      ctx.globalAlpha = 1;
+    }
+    if (flash > 0) { ctx.fillStyle = 'rgba(255,255,255,' + Math.min(1, flash) + ')'; ctx.fillRect(-10, -10, W + 20, H + 20); }
+    ctx.restore();
+  }
+
+  /* ---------- input: tap anywhere on the page ---------- */
+  S.stage.addEventListener('pointerdown', function (e) {
+    var tg = e.target;
+    if (tg && tg.closest && tg.closest('.ov')) return;
+    e.preventDefault();
+    flap();
+  });
+  NG.input(function (k, down) { if (down && (k === 'act' || k === 'up')) flap(); });
+
+  reset();
+  var loop = NG.loop(update, draw);
+  loop.start();
+  NG.expose({
+    score: function () { return score; },
+    state: function () { return state; },
+    started: function () { return started; },
+    flap: flap,
+    step: update,
+    birdY: function () { return bird.y; },
+    birdVy: function () { return bird.vy; },
+    speed: speed,
+    gap: gapSize,
+    pipeCount: function () { return pipes.length; },
+    nextGap: function () {
+      for (var i = 0; i < pipes.length; i++) {
+        if (pipes[i].x + PIPE_W > BX - BR) return { x: pipes[i].x, top: pipes[i].c - pipes[i].g / 2, bottom: pipes[i].c + pipes[i].g / 2, center: pipes[i].c };
+      }
+      return null;
+    },
+    pipes: function () { return pipes.map(function (p) { return { x: p.x, c: p.c, g: p.g }; }); },
+    setScore: function (n) { if (state === 'play') { score = n; S.score(n); } }
+  });
+  NG.intro({ lines: ['Tap anywhere (or press space) to flap.', 'Fly through the gaps: +1 for every pair.', 'Do not touch the pipes or the ground.', '10, 20 and 30 points earn a medal.'], fn: start });
+})();
+</script>
+</body>
+</html>

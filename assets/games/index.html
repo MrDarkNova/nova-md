@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="en" class="hub">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="theme-color" content="#0b0f1a">
+<meta name="description" content="Phone games that open from a link. No install.">
+<title>DarkNova Games</title>
+<link rel="stylesheet" href="common.css">
+</head>
+<body>
+<div class="hubwrap">
+  <h1>🎮 DarkNova Games</h1>
+  <p class="sub" id="sub">Pick a game. It opens right here.</p>
+  <div class="grid" id="grid"></div>
+  <footer>Works on iPhone and Android. Scores stay on this phone.</footer>
+</div>
+<script>
+(function () {
+  var grid = document.getElementById('grid');
+  function get(key) { try { return window.localStorage.getItem(key); } catch (e) { return null; } }
+  function clock(s) { var m = Math.floor(s / 60), r = s % 60; return m + ':' + (r < 10 ? '0' : '') + r; }
+  function best(g) {
+    var raw = get(g.bestKey || ('ng:' + g.id + ':best'));
+    var n = Number(raw);
+    if (raw === null || !isFinite(n) || n <= 0) return '';
+    return 'Best ' + (g.time ? clock(n) : n);
+  }
+  function tile(g) {
+    var a = document.createElement('a');
+    a.className = 'tile';
+    a.href = g.path || (g.id + '.html');
+    a.style.setProperty('--c', g.color || '#7c5cff');
+    var b = best(g);
+    var html = '<div class="em"></div><div class="nm"></div><div class="tg"></div>' + (b ? '<div class="bs"></div>' : '');
+    a.innerHTML = html;
+    a.querySelector('.em').textContent = g.emoji || '🎮';
+    a.querySelector('.nm').textContent = g.name;
+    a.querySelector('.tg').textContent = g.tag || '';
+    if (b) a.querySelector('.bs').textContent = b;
+    return a;
+  }
+  function show(list) {
+    grid.innerHTML = '';
+    for (var i = 0; i < list.length; i++) grid.appendChild(tile(list[i]));
+  }
+  var xhr = new XMLHttpRequest();
+  xhr.open('GET', 'games.json?v=' + Date.now());
+  xhr.onload = function () {
+    try { show(JSON.parse(xhr.responseText).games || []); }
+    catch (e) { document.getElementById('sub').textContent = 'Could not load the game list. Refresh the page.'; }
+  };
+  xhr.onerror = function () { document.getElementById('sub').textContent = 'Could not load the game list. Refresh the page.'; };
+  xhr.send();
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,405 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="theme-color" content="#0b0f1a">
+<meta name="description" content="Runner. Jump the spikes and duck the birds.">
+<title>Runner</title>
+<link rel="stylesheet" href="common.css">
+<style>.btn.primary{color:#2a1600}.pbtn.jumpbtn,.pbtn.duckbtn{font-size:20px;font-weight:800;letter-spacing:.02em}</style>
+</head>
+<body data-game="runner" data-title="Runner" style="--acc:#ff9f43">
+<script src="common.js"></script>
+<script>
+(function () {
+  'use strict';
+  var W = 420, H = 280, GY = 226;               // canvas size, ground line (y of the feet)
+  var FX = 72;                                  // the fox's x
+  var JUMP_V = 620, GRAV = 2200, CUT_V = 200, MIN_HOLD = 0.09;
+  var S = NG.stage({
+    w: W, h: H,
+    pad: [{ k: 'act', t: '▲ Jump', cls: 'jumpbtn', label: 'Jump' }, { k: 'down', t: '▼ Duck', cls: 'duckbtn', label: 'Duck' }]
+  });
+  var ctx = S.ctx;
+  // make the two pad buttons big: Jump takes two thirds of the row
+  (function () {
+    var row = S.pad.firstChild, bs = row.children;
+    row.style.width = '100%'; row.style.maxWidth = '460px';
+    bs[0].style.width = 'auto'; bs[0].style.flex = '2 1 0'; bs[0].style.height = '72px'; bs[0].style.lineHeight = '70px';
+    bs[1].style.width = 'auto'; bs[1].style.flex = '1 1 0'; bs[1].style.height = '72px'; bs[1].style.lineHeight = '70px';
+  })();
+
+  var state = 'ready', dist = 0, score = 0, t = 0, speed = 240;
+  var fox = { h: 0, vh: 0, jumpAge: 0, ducking: false, ph: 0, dead: false, rot: 0 };
+  var obs = [], parts = [], sinceSpawn = 0, nextAt = 380, jumpBuf = 0, duckTimer = 0;
+  var cp = null, cvHold = false, cvDuck = false;      // canvas finger
+  var night = 0, nightTarget = 0, flash = 0, overT = 0, shown = false, toast = 0, toastTxt = '', lastBand = 0, hint = 0;
+  var clouds = [], stars = [];
+  (function seed() {
+    var i;
+    for (i = 0; i < 5; i++) clouds.push({ x: NG.rand(0, W), y: NG.rand(20, 110), s: NG.rand(0.6, 1.2) });
+    for (i = 0; i < 36; i++) stars.push({ x: NG.rand(0, W), y: NG.rand(0, GY - 70), r: NG.rand(0.7, 1.7), p: NG.rand(0, 6) });
+  })();
+
+  function calcSpeed() { return Math.min(470, 240 + score * 0.3); }
+
+  /* ---------- obstacles ---------- */
+  function maxGroupW(sp) { return Math.max(34, Math.min(56, 0.7 * sp * 0.415 - 22)); }
+  function makeGroup() {
+    var sp = speed, mw = maxGroupW(sp), r = Math.random(), o, i, x;
+    if (score >= 120 && r < 0.2) {
+      o = { t: 'bird', yb: 6, w: 34, parts: [{ dx: 0, w: 34, h: 22 }], x: W + 24, low: true };
+    } else if (score >= 190 && r < 0.4) {
+      o = { t: 'bird', yb: 30, w: 34, parts: [{ dx: 0, w: 34, h: 22 }], x: W + 24, low: false };
+    } else if (r < 0.7) {
+      var n = NG.ri(1, Math.max(1, Math.min(3, Math.floor((mw + 2) / 18))));
+      o = { t: 'spike', yb: 0, w: n * 18 - 2, parts: [], x: W + 24 };
+      for (i = 0; i < n; i++) o.parts.push({ dx: i * 18, w: 16, h: 28 });
+    } else {
+      o = { t: 'rock', yb: 0, w: 0, parts: [], x: W + 24 };
+      var k = Math.random() < 0.55 || mw < 52 ? 1 : 2; x = 0;
+      for (i = 0; i < k; i++) {
+        var big = Math.random() < 0.45, pw = big ? 30 : 22, ph = big ? 36 : 22;
+        if (x + pw > mw + 0.5) { pw = 22; ph = 22; }
+        o.parts.push({ dx: x, w: pw, h: ph }); x += pw + 3;
+      }
+      o.w = x - 3;
+    }
+    return o;
+  }
+  function spawn() {
+    var o = makeGroup();
+    obs.push(o);
+    // the gap to the next group is always at least 0.76 s of running: a jump lasts 0.56 s
+    var gap = speed * 0.76 + NG.rand(0, speed * 0.9);
+    sinceSpawn = 0; nextAt = o.w + gap;
+  }
+
+  /* ---------- fox ---------- */
+  function onGround() { return fox.h <= 0.01 && fox.vh <= 0; }
+  function jumpHeld() { return NG.held.act || NG.held.up || cvHold; }
+  function duckHeld() { return NG.held.down || cvDuck || duckTimer > 0; }
+  function doJump() {
+    if (state !== 'play') return;
+    if (onGround()) {
+      fox.vh = JUMP_V; fox.jumpAge = 0; jumpBuf = 0; fox.h = 0.02;
+      NG.snd('jump');
+      puff(FX - 8, GY, 4, 'rgba(255,255,255,.55)', 40, 0.35);
+    } else jumpBuf = 0.12;
+  }
+  function puff(x, y, n, col, spd, life) {
+    for (var i = 0; i < n; i++) {
+      var a = NG.rand(0, 6.28), s = NG.rand(10, spd);
+      parts.push({ x: x, y: y, vx: Math.cos(a) * s - 20, vy: Math.sin(a) * s * 0.6 - 10, t: NG.rand(0.2, life), c: col, r: NG.rand(1.5, 3) });
+    }
+  }
+  function foxRect() {
+    var top = GY - fox.h - (fox.ducking ? 20 : 40), bot = GY - fox.h - 2;
+    return fox.ducking ? { x: FX - 16, w: 34, y: top, h: bot - top } : { x: FX - 11, w: 22, y: top, h: bot - top };
+  }
+  function partRect(o, p) {
+    var top = GY - o.yb - p.h + (o.t === 'bird' ? 3 : 4), bot = GY - o.yb - (o.t === 'bird' ? 3 : 0);
+    return { x: o.x + p.dx + 3, w: p.w - 6, y: top, h: bot - top };
+  }
+
+  function reset() {
+    state = 'ready'; dist = 0; score = 0; speed = 240; t = 0;
+    fox.h = 0; fox.vh = 0; fox.jumpAge = 0; fox.ducking = false; fox.dead = false; fox.rot = 0;
+    obs = []; parts = []; sinceSpawn = 0; nextAt = 380; jumpBuf = 0; duckTimer = 0;
+    cp = null; cvHold = false; cvDuck = false; night = 0; nightTarget = 0; flash = 0; overT = 0; shown = false; toast = 0; lastBand = 0; hint = 3.2;
+    S.score(0);
+  }
+  function start() { reset(); state = 'play'; }
+
+  function die() {
+    if (state !== 'play') return;
+    state = 'over'; fox.dead = true; flash = 1; overT = 0; fox.vh = 360;
+    NG.snd('hit'); NG.buzz(60);
+    puff(FX, GY - fox.h - 20, 14, '#ffb347', 190, 0.6);
+  }
+
+  function update(dt) {
+    var i;
+    t += dt; flash = Math.max(0, flash - dt * 3); toast = Math.max(0, toast - dt);
+    night += (nightTarget - night) * Math.min(1, dt * 0.9);
+    for (i = parts.length - 1; i >= 0; i--) {
+      var p = parts[i]; p.t -= dt; p.x += p.vx * dt; p.y += p.vy * dt; p.vy += 300 * dt;
+      if (p.t <= 0) parts.splice(i, 1);
+    }
+    if (state === 'ready') { dist += 90 * dt; fox.ph += dt * 10; return; }
+    if (state === 'over') {
+      overT += dt;
+      fox.vh -= GRAV * dt; fox.h = Math.max(0, fox.h + fox.vh * dt); if (fox.h === 0 && fox.vh < 0) fox.vh = 0;
+      fox.rot += (1.5 - fox.rot) * Math.min(1, dt * 6);
+      if (!shown && overT > 0.8) { shown = true; NG.over({ score: score, lines: ['Distance ' + Math.round(dist / 12) + ' m'], again: start }); }
+      return;
+    }
+
+    /* ---- play ---- */
+    hint = Math.max(0, hint - dt);
+    if (cp && !cp.decided) { cp.age += dt; if (cp.age >= 0.05) { cp.decided = true; cvHold = true; doJump(); } }
+    jumpBuf = Math.max(0, jumpBuf - dt);
+    duckTimer = Math.max(0, duckTimer - dt);
+    speed = calcSpeed();
+    dist += speed * dt;
+    score = Math.floor(dist / 16);
+    S.score(score);
+    var band = Math.floor(score / 300);
+    if (band !== lastBand) {
+      lastBand = band; nightTarget = band % 2 === 1 ? 1 : 0;
+      toast = 2; toastTxt = nightTarget ? '🌙 Night run' : '☀️ Sunrise';
+      NG.snd('coin');
+    }
+    // fox
+    fox.ph += dt * (6 + speed * 0.028);
+    var was = fox.h;
+    fox.ducking = onGround() && duckHeld();
+    if (!onGround()) {
+      var g = GRAV;
+      if (duckHeld()) { g = GRAV * 2.6; if (fox.vh > 0) fox.vh *= 0.9; }       // swipe / hold down in the air: fast fall
+      fox.jumpAge += dt;
+      fox.vh -= g * dt;
+      if (fox.vh > CUT_V && !jumpHeld() && fox.jumpAge > MIN_HOLD) fox.vh = CUT_V;   // let go early: a lower jump
+      fox.h += fox.vh * dt;
+      if (fox.h <= 0) {
+        fox.h = 0; fox.vh = 0;
+        puff(FX - 4, GY, 5, 'rgba(255,255,255,.5)', 50, 0.35);
+        if (jumpBuf > 0) doJump();
+      }
+    } else if (jumpBuf > 0) doJump();
+    // obstacles
+    sinceSpawn += speed * dt;
+    if (sinceSpawn >= nextAt) spawn();
+    var fr = foxRect();
+    for (i = obs.length - 1; i >= 0; i--) {
+      var o = obs[i];
+      o.x -= speed * dt;
+      if (o.x + o.w < -30) { obs.splice(i, 1); continue; }
+      if (o.x > FX + 60) continue;
+      for (var j = 0; j < o.parts.length; j++) {
+        var r = partRect(o, o.parts[j]);
+        if (NG.hit(fr, r)) { die(); return; }
+      }
+    }
+    for (i = 0; i < clouds.length; i++) {
+      clouds[i].x -= (8 + clouds[i].s * 6) * dt - 0 + speed * 0.02 * dt;
+      if (clouds[i].x < -80) { clouds[i].x = W + 40; clouds[i].y = NG.rand(20, 110); }
+    }
+  }
+
+  /* ---------- drawing ---------- */
+  function lerp(a, b, f) { return a + (b - a) * f; }
+  function mix(a, b, f) { return 'rgb(' + Math.round(lerp(a[0], b[0], f)) + ',' + Math.round(lerp(a[1], b[1], f)) + ',' + Math.round(lerp(a[2], b[2], f)) + ')'; }
+  function mountains(col, base, par, hmax, k, ph) {
+    ctx.fillStyle = col; ctx.beginPath(); ctx.moveTo(0, GY);
+    for (var x = 0; x <= W + 6; x += 6) {
+      var u = x + dist * par;
+      var s = 1 - Math.abs(Math.sin(u * k + ph));
+      ctx.lineTo(x, base - hmax * (0.35 + 0.65 * s) * (0.75 + 0.25 * Math.sin(u * k * 0.37)));
+    }
+    ctx.lineTo(W, GY); ctx.closePath(); ctx.fill();
+  }
+  function trees(col, par) {
+    ctx.fillStyle = col;
+    var step = 70, first = Math.floor(dist * par / step);
+    for (var i = first; i < first + Math.ceil(W / step) + 2; i++) {
+      var x = i * step - dist * par, n = (i * 37 + 11) % 5, hh = 22 + n * 6, w = 14 + n * 2;
+      ctx.beginPath(); ctx.moveTo(x - w, GY); ctx.lineTo(x, GY - hh); ctx.lineTo(x + w, GY); ctx.closePath(); ctx.fill();
+      ctx.beginPath(); ctx.moveTo(x - w * 0.8, GY - hh * 0.4); ctx.lineTo(x, GY - hh * 1.18); ctx.lineTo(x + w * 0.8, GY - hh * 0.4); ctx.closePath(); ctx.fill();
+    }
+  }
+  function drawCloud(x, y, s) {
+    ctx.beginPath();
+    ctx.arc(x, y, 9 * s, 0, 6.3); ctx.arc(x + 11 * s, y - 6 * s, 12 * s, 0, 6.3);
+    ctx.arc(x + 25 * s, y, 10 * s, 0, 6.3); ctx.arc(x + 12 * s, y + 4 * s, 10 * s, 0, 6.3);
+    ctx.fill();
+  }
+  function leg(hx, hy, phase, color, jumping) {
+    var fx, fy;
+    if (jumping) { fx = hx + (hx > 0 ? 9 : -8); fy = hy + 6 - (hx > 0 ? 3 : 0); }
+    else { fx = hx + Math.sin(phase) * 8; fy = -2 - Math.max(0, Math.cos(phase)) * 6; }
+    ctx.strokeStyle = color; ctx.lineWidth = 4.2; ctx.lineCap = 'round';
+    ctx.beginPath(); ctx.moveTo(hx, hy); ctx.lineTo(fx, fy); ctx.stroke();
+    ctx.fillStyle = '#4a2410'; ctx.beginPath(); ctx.arc(fx, fy, 2.6, 0, 6.3); ctx.fill();
+  }
+  function drawFox() {
+    var jumping = !onGround() && !fox.dead, duck = fox.ducking;
+    ctx.save(); ctx.translate(FX, GY - fox.h);
+    if (fox.dead) ctx.rotate(-fox.rot * 0.7);
+    if (duck) ctx.scale(1.18, 0.56);
+    var ph = fox.ph;
+    // tail
+    ctx.save(); ctx.translate(-13, -21); ctx.rotate(jumping ? -0.9 : -0.35 + Math.sin(ph * 0.5) * 0.14);
+    ctx.fillStyle = '#f07a12'; ctx.beginPath(); ctx.ellipse(-12, 0, 14, 7, 0, 0, 6.3); ctx.fill();
+    ctx.fillStyle = '#fff6e8'; ctx.beginPath(); ctx.ellipse(-22, 0, 6.5, 5.6, 0, 0, 6.3); ctx.fill();
+    ctx.restore();
+    leg(-9, -14, ph + 3.14, '#c9600c', jumping);
+    leg(8, -14, ph, '#c9600c', jumping);
+    // body
+    var g = ctx.createLinearGradient(0, -31, 0, -12); g.addColorStop(0, '#ffa23a'); g.addColorStop(1, '#ee7d14');
+    ctx.fillStyle = g; ctx.beginPath(); ctx.ellipse(0, -21, 15.5, 9.5, 0, 0, 6.3); ctx.fill();
+    ctx.fillStyle = '#fff1dc'; ctx.beginPath(); ctx.ellipse(3, -17, 9, 4.6, 0, 0, 6.3); ctx.fill();
+    leg(-4, -14, ph, '#ee7d14', jumping);
+    leg(12, -14, ph + 3.14, '#ee7d14', jumping);
+    // head
+    ctx.fillStyle = '#ff9a2e'; ctx.beginPath(); ctx.arc(14, -29, 9.5, 0, 6.3); ctx.fill();
+    // ears
+    ctx.fillStyle = '#ee7d14';
+    ctx.beginPath(); ctx.moveTo(6.5, -35); ctx.lineTo(8.5, -48); ctx.lineTo(14, -37); ctx.closePath(); ctx.fill();
+    ctx.beginPath(); ctx.moveTo(12, -37); ctx.lineTo(19.5, -47); ctx.lineTo(21, -34); ctx.closePath(); ctx.fill();
+    ctx.fillStyle = '#4a2410';
+    ctx.beginPath(); ctx.moveTo(8.6, -37); ctx.lineTo(9.2, -44); ctx.lineTo(12, -38); ctx.closePath(); ctx.fill();
+    ctx.beginPath(); ctx.moveTo(14.5, -38); ctx.lineTo(18.5, -43); ctx.lineTo(19, -36.5); ctx.closePath(); ctx.fill();
+    // snout and cheek
+    ctx.fillStyle = '#fff1dc'; ctx.beginPath(); ctx.moveTo(15, -32); ctx.lineTo(28, -27); ctx.lineTo(15, -20.5); ctx.closePath(); ctx.fill();
+    ctx.fillStyle = '#2b1608'; ctx.beginPath(); ctx.arc(27.5, -27.2, 2.3, 0, 6.3); ctx.fill();
+    if (fox.dead) {
+      ctx.strokeStyle = '#2b1608'; ctx.lineWidth = 1.5; ctx.beginPath();
+      ctx.moveTo(14, -34); ctx.lineTo(18, -30); ctx.moveTo(18, -34); ctx.lineTo(14, -30); ctx.stroke();
+    } else {
+      ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.arc(17, -31, 2.8, 0, 6.3); ctx.fill();
+      ctx.fillStyle = '#2b1608'; ctx.beginPath(); ctx.arc(17.8, -30.8, 1.5, 0, 6.3); ctx.fill();
+    }
+    ctx.restore();
+  }
+  function drawObs(o, sh) {
+    var i, p, x, y;
+    if (o.t === 'spike') {
+      for (i = 0; i < o.parts.length; i++) {
+        p = o.parts[i]; x = o.x + p.dx;
+        var g = ctx.createLinearGradient(x, 0, x + p.w, 0); g.addColorStop(0, '#9aa6c8'); g.addColorStop(0.5, '#e4eaff'); g.addColorStop(1, '#6f7ba3');
+        ctx.fillStyle = g; ctx.beginPath(); ctx.moveTo(x, GY); ctx.lineTo(x + p.w / 2, GY - p.h); ctx.lineTo(x + p.w, GY); ctx.closePath(); ctx.fill();
+        ctx.strokeStyle = 'rgba(30,36,70,.7)'; ctx.lineWidth = 1.4; ctx.stroke();
+      }
+    } else if (o.t === 'rock') {
+      for (i = 0; i < o.parts.length; i++) {
+        p = o.parts[i]; x = o.x + p.dx;
+        ctx.fillStyle = sh; ctx.beginPath(); ctx.ellipse(x + p.w / 2, GY, p.w / 2 + 3, 3, 0, 0, 6.3); ctx.fill();
+        var rg = ctx.createLinearGradient(x, GY - p.h, x + p.w, GY); rg.addColorStop(0, '#a79b8e'); rg.addColorStop(1, '#6b6158');
+        ctx.fillStyle = rg; ctx.beginPath();
+        ctx.moveTo(x, GY); ctx.lineTo(x + 1, GY - p.h * 0.55); ctx.lineTo(x + p.w * 0.3, GY - p.h); ctx.lineTo(x + p.w * 0.72, GY - p.h * 0.92);
+        ctx.lineTo(x + p.w, GY - p.h * 0.4); ctx.lineTo(x + p.w - 1, GY); ctx.closePath(); ctx.fill();
+        ctx.strokeStyle = 'rgba(40,30,25,.65)'; ctx.lineWidth = 1.4; ctx.stroke();
+        ctx.strokeStyle = 'rgba(40,30,25,.35)'; ctx.beginPath(); ctx.moveTo(x + p.w * 0.45, GY - p.h * 0.8); ctx.lineTo(x + p.w * 0.38, GY - p.h * 0.4); ctx.stroke();
+      }
+    } else {
+      x = o.x; y = GY - o.yb - 11 + Math.sin(t * 5 + o.x * 0.05) * 2;
+      var wing = Math.sin(t * 16 + o.x * 0.1);
+      ctx.fillStyle = '#7a4fd8';
+      ctx.beginPath(); ctx.moveTo(x + 10, y); ctx.lineTo(x + 18, y - 4 - wing * 14); ctx.lineTo(x + 24, y - 1 - wing * 6); ctx.lineTo(x + 20, y + 3); ctx.closePath(); ctx.fill();
+      ctx.beginPath(); ctx.ellipse(x + 18, y + 1, 14, 8, 0, 0, 6.3); ctx.fillStyle = '#6a3fc8'; ctx.fill();
+      ctx.fillStyle = '#9b7bf0'; ctx.beginPath(); ctx.ellipse(x + 19, y + 3.5, 9, 4, 0, 0, 6.3); ctx.fill();
+      ctx.fillStyle = '#5a30b0'; ctx.beginPath(); ctx.moveTo(x + 14, y - 1); ctx.lineTo(x + 8, y - 6 + wing * 9); ctx.lineTo(x + 20, y - 2); ctx.closePath(); ctx.fill();
+      ctx.fillStyle = '#ffd24a'; ctx.beginPath(); ctx.moveTo(x + 4, y - 1); ctx.lineTo(x - 5, y + 2); ctx.lineTo(x + 4, y + 5); ctx.closePath(); ctx.fill();
+      ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.arc(x + 9, y - 1.5, 3, 0, 6.3); ctx.fill();
+      ctx.fillStyle = '#1c1030'; ctx.beginPath(); ctx.arc(x + 8, y - 1.5, 1.5, 0, 6.3); ctx.fill();
+      ctx.fillStyle = '#5a30b0'; ctx.beginPath(); ctx.moveTo(x + 32, y); ctx.lineTo(x + 40, y - 4); ctx.lineTo(x + 38, y + 3); ctx.closePath(); ctx.fill();
+    }
+  }
+  function draw() {
+    var i, nt = night, x;
+    ctx.save();
+    var sg = ctx.createLinearGradient(0, 0, 0, GY);
+    sg.addColorStop(0, mix([108, 190, 255], [10, 14, 42], nt)); sg.addColorStop(1, mix([224, 246, 255], [44, 52, 104], nt));
+    ctx.fillStyle = sg; ctx.fillRect(0, 0, W, H);
+    if (nt > 0.03) {
+      for (i = 0; i < stars.length; i++) {
+        ctx.globalAlpha = nt * (0.45 + 0.55 * Math.sin(t * 2 + stars[i].p)); ctx.fillStyle = '#fff'; ctx.fillRect(stars[i].x, stars[i].y, stars[i].r, stars[i].r);
+      }
+      ctx.globalAlpha = 1;
+    }
+    // sun and moon
+    ctx.globalAlpha = 1 - nt; ctx.fillStyle = '#ffe27a'; ctx.beginPath(); ctx.arc(340, 56, 20, 0, 6.3); ctx.fill();
+    ctx.globalAlpha = (1 - nt) * 0.3; ctx.beginPath(); ctx.arc(340, 56, 29, 0, 6.3); ctx.fill();
+    ctx.globalAlpha = nt; ctx.fillStyle = '#f4f1d8'; ctx.beginPath(); ctx.arc(340, 56, 17, 0, 6.3); ctx.fill();
+    ctx.fillStyle = mix([108, 190, 255], [10, 14, 42], 1); ctx.globalAlpha = nt * 0.9; ctx.beginPath(); ctx.arc(348, 51, 15, 0, 6.3); ctx.fill();
+    ctx.globalAlpha = 1;
+    ctx.globalAlpha = 0.8; ctx.fillStyle = mix([255, 255, 255], [110, 120, 180], nt);
+    for (i = 0; i < clouds.length; i++) drawCloud(clouds[i].x, clouds[i].y, clouds[i].s);
+    ctx.globalAlpha = 1;
+    mountains(mix([160, 190, 230], [36, 44, 90], nt), GY - 40, 0.06, 90, 0.011, 0.5);
+    mountains(mix([116, 170, 150], [28, 40, 72], nt), GY - 14, 0.14, 50, 0.019, 2.1);
+    trees(mix([70, 150, 96], [18, 40, 58], nt), 0.32);
+    // ground
+    ctx.fillStyle = mix([92, 176, 74], [30, 74, 62], nt); ctx.fillRect(0, GY, W, 14);
+    ctx.fillStyle = mix([176, 130, 78], [66, 52, 60], nt); ctx.fillRect(0, GY + 14, W, H - GY - 14);
+    ctx.fillStyle = mix([150, 108, 62], [52, 40, 50], nt);
+    var off = dist % 36;
+    for (x = -off; x < W + 36; x += 36) { ctx.fillRect(x + 6, GY + 26, 10, 3); ctx.fillRect(x + 24, GY + 40, 6, 3); }
+    ctx.fillStyle = mix([120, 205, 96], [44, 100, 80], nt);
+    for (x = -(dist % 24); x < W + 24; x += 24) ctx.fillRect(x, GY, 8, 3);
+    ctx.fillStyle = 'rgba(0,0,0,.18)'; ctx.beginPath(); ctx.ellipse(FX, GY + 1, 17 - Math.min(8, fox.h * 0.12), 3, 0, 0, 6.3); ctx.fill();
+    var sh = 'rgba(0,0,0,.2)';
+    for (i = 0; i < obs.length; i++) drawObs(obs[i], sh);
+    drawFox();
+    for (i = 0; i < parts.length; i++) {
+      var q = parts[i]; ctx.globalAlpha = Math.max(0, Math.min(1, q.t * 3)); ctx.fillStyle = q.c; ctx.beginPath(); ctx.arc(q.x, q.y, q.r, 0, 6.3); ctx.fill();
+    }
+    ctx.globalAlpha = 1;
+    // score and hints
+    NG.text(ctx, String(score), W - 14, 18, 20, nt > 0.5 ? '#fff' : '#26304f', 'right', '800');
+    if (hint > 0 && state === 'play') {
+      ctx.globalAlpha = Math.min(1, hint);
+      NG.text(ctx, 'Tap = jump (hold = higher)  ·  swipe down = duck', W / 2, 52, 13, nt > 0.5 ? '#fff' : '#26304f');
+      ctx.globalAlpha = 1;
+    }
+    if (toast > 0) { ctx.globalAlpha = Math.min(1, toast); NG.text(ctx, toastTxt, W / 2, 84, 22, nt > 0.5 ? '#fff' : '#26304f', 'center', '800'); ctx.globalAlpha = 1; }
+    if (flash > 0) { ctx.fillStyle = 'rgba(255,255,255,' + flash * 0.8 + ')'; ctx.fillRect(0, 0, W, H); }
+    ctx.restore();
+  }
+
+  /* ---------- input ---------- */
+  NG.input(function (k, down) {
+    if (state !== 'play') return;
+    if (down && (k === 'act' || k === 'up')) doJump();
+    if (down && k === 'down') duckTimer = Math.max(duckTimer, 0.1);
+  });
+  S.cv.addEventListener('pointerdown', function (e) {
+    if (cp) return;
+    var q = S.pos(e);
+    cp = { id: e.pointerId, sx: q.x, sy: q.y, age: 0, decided: false };
+    try { S.cv.setPointerCapture(e.pointerId); } catch (x) { /* ignore */ }
+  });
+  S.cv.addEventListener('pointermove', function (e) {
+    if (!cp || e.pointerId !== cp.id) return;
+    var q = S.pos(e), dy = q.y - cp.sy;
+    if (dy > 14 * 1) {                  // swipe down: duck (and fall fast in the air)
+      cp.decided = true; cvHold = false;
+      if (state === 'play') { cvDuck = true; duckTimer = 0.45; }
+    } else if (!cp.decided && dy < -14) { cp.decided = true; cvHold = true; doJump(); }
+  });
+  function lift(e) {
+    if (!cp || e.pointerId !== cp.id) return;
+    if (!cp.decided) doJump();          // a quick tap
+    cp = null; cvHold = false; cvDuck = false;
+  }
+  S.cv.addEventListener('pointerup', lift);
+  S.cv.addEventListener('pointercancel', lift);
+
+  reset();
+  var loop = NG.loop(update, draw);
+  loop.start();
+  NG.expose({
+    score: function () { return score; },
+    state: function () { return state; },
+    speed: function () { return speed; },
+    foxH: function () { return fox.h; },
+    ducking: function () { return fox.ducking; },
+    night: function () { return nightTarget; },
+    jump: doJump,
+    hold: function (v) { cvHold = !!v; },
+    duck: function (v) { cvDuck = !!v; },
+    step: update,
+    obstacles: function () { return obs.map(function (o) { return { t: o.t, x: o.x, w: o.w, yb: o.yb, low: o.low, parts: o.parts.length }; }); },
+    setScore: function (n) { dist = n * 16; score = n; },
+    nextAt: function () { return nextAt; }
+  });
+  NG.intro({ lines: ['Tap, or press Jump, to jump. Hold for a higher jump.', 'Swipe down, or hold Duck, to duck under the birds.', 'Hop the spikes and rocks. The faster you run, the higher the score.'], fn: start });
+})();
+</script>
+</body>
+</html>
