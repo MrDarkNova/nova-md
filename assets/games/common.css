@@ -54,3 +54,26 @@ html.hub,html.hub body{position:static;overflow:auto;height:auto;min-height:100%
 .tile .bs{position:absolute;right:12px;top:12px;font-size:12px;color:var(--warn);font-weight:700}
 .tile:before{content:"";position:absolute;left:0;top:0;right:0;height:4px;background:var(--c,var(--acc))}
 .hubwrap footer{margin-top:22px;text-align:center;color:var(--muted);font-size:12px}
+
+/* embedded in a WhatsApp chat bubble: no fixed viewport, no scrolling, height follows the content */
+html.embed,html.embed body{position:static;width:100%;height:auto;overflow:hidden;background:transparent;touch-action:none}
+html.embed #app{position:relative;top:auto;left:auto;height:auto;display:block;padding:0;background:var(--bg);border-radius:14px;overflow:hidden}
+html.embed #bar{height:40px;padding:0 8px}
+html.embed #bar .back{display:none}
+html.embed #bar .ttl{font-size:14px}
+html.embed #bar .stat{margin-left:8px}
+html.embed #bar .stat small{font-size:9px}
+html.embed #bar .stat b{font-size:14px}
+html.embed #bar .mute{width:28px;height:28px;line-height:28px;font-size:14px;margin-left:6px}
+html.embed #stage{display:flex;flex:none;min-height:0;padding:4px}
+html.embed #stage.flush{padding:0}
+html.embed #pad{padding:4px 8px 8px}
+html.embed .pbtn{width:54px;height:54px;line-height:52px;font-size:22px;margin:0 4px;border-radius:16px}
+html.embed .pbtn.wide{width:84px}
+html.embed .ov{padding:8px;overflow:auto}
+html.embed .ov .card{padding:12px 12px 10px;border-radius:16px;max-height:100%;overflow:auto}
+html.embed .ov h2{font-size:19px;margin-bottom:2px}
+html.embed .ov .big{font-size:32px;margin:0}
+html.embed .ov p{font-size:12px;margin:2px 0}
+html.embed .ov .btns{margin-top:8px}
+html.embed .btn{height:38px;line-height:38px;margin-top:6px;font-size:14px;border-radius:12px}

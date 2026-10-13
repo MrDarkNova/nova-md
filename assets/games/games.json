@@ -20,7 +20,8 @@
    "aliases": [],
    "path": "2048/index.html",
    "bestKey": "bestScore",
-   "credit": "Gabriele Cirulli (MIT)"
+   "credit": "Gabriele Cirulli (MIT)",
+   "embedCss": "body{margin:0;padding:6px 0 10px}.container{margin:0 auto}.above-game,.game-explanation,hr,hr~p{display:none}.heading{margin-bottom:8px}"
   },
   {
    "id": "flap",

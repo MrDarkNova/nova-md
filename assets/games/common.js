@@ -8,6 +8,25 @@
   var body = document.body;
   NG.id = body.getAttribute('data-game') || 'game';
   NG.title = body.getAttribute('data-title') || document.title || 'Game';
+  // Embedded: the page is shown inside a WhatsApp chat bubble. It has no fixed viewport height, so
+  // the layout follows the width only and reports its height to the chat when it can.
+  NG.embed = window.NG_EMBED === true || window.NG_EMBED === 1 || document.documentElement.className.indexOf('embed') >= 0;
+  if (NG.embed) document.documentElement.className += (document.documentElement.className.indexOf('embed') >= 0 ? '' : ' embed');
+  NG.embedH = 300;
+  var lastReport = 0;
+  // Tells the chat how tall the game is (Android and iOS bridges, both optional).
+  NG.report = function () {
+    if (!NG.embed) return;
+    var a = document.getElementById('app');
+    var h = Math.ceil(a ? a.getBoundingClientRect().height : 0);
+    if (!h || h === lastReport) return;
+    lastReport = h;
+    try { if (window.AndroidBridge && window.AndroidBridge.updateSize) window.AndroidBridge.updateSize(h); } catch (e) { /* no bridge */ }
+    try {
+      var mh = window.webkit && window.webkit.messageHandlers;
+      if (mh) ['updateSize', 'resize', 'setHeight'].forEach(function (n) { if (mh[n] && mh[n].postMessage) mh[n].postMessage(h); });
+    } catch (e) { /* no bridge */ }
+  };
 
   /* ---------- small tools ---------- */
   NG.rand = function (a, b) { return a + Math.random() * (b - a); };
@@ -23,7 +42,7 @@
   };
   NG.hit = function (a, b) { return a.x < b.x + b.w && a.x + a.w > b.x && a.y < b.y + b.h && a.y + a.h > b.y; };
   NG.rr = function (ctx, x, y, w, h, r) {
-    r = Math.min(r, w / 2, h / 2);
+    r = Math.max(0, Math.min(r, w / 2, h / 2)); // a shrinking shape must never get a negative radius
     ctx.beginPath();
     ctx.moveTo(x + r, y);
     ctx.lineTo(x + w - r, y); ctx.arcTo(x + w, y, x + w, y + r, r);
@@ -253,8 +272,23 @@
     };
     function layout() {
       var cs = window.getComputedStyle(stage);
-      var aw = stage.clientWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight);
-      var ah = stage.clientHeight - parseFloat(cs.paddingTop) - parseFloat(cs.paddingBottom);
+      var padX = parseFloat(cs.paddingLeft) + parseFloat(cs.paddingRight);
+      var padY = parseFloat(cs.paddingTop) + parseFloat(cs.paddingBottom);
+      var aw, ah;
+      if (NG.embed) {
+        // In a chat bubble the height is not given, so it is chosen from the width.
+        var full = stage.clientWidth || document.documentElement.clientWidth || window.innerWidth || 320;
+        var maxH = opts.embedH || NG.embedH;
+        aw = full - padX;
+        if (opts.fill) {
+          var sh = Math.round(NG.clamp(aw * (opts.ratio || 1.05), 220, maxH + 40));
+          stage.style.height = sh + 'px';
+          ah = sh - padY;
+        } else ah = maxH;
+      } else {
+        aw = stage.clientWidth - padX;
+        ah = stage.clientHeight - padY;
+      }
       if (aw < 40 || ah < 40) return;
       var W, H, scale;
       if (opts.fill) { W = Math.floor(aw); H = Math.floor(ah); scale = 1; }
@@ -267,6 +301,7 @@
       if (opts.pixel) { ctx.imageSmoothingEnabled = false; cv.style.imageRendering = 'pixelated'; }
       S.W = W; S.H = H; S.scale = scale; S.dpr = dpr;
       if (S.onresize) S.onresize(W, H);
+      NG.report();
     }
     S.layout = layout;
     layout();
@@ -275,6 +310,8 @@
     if (window.ResizeObserver) { try { new ResizeObserver(layout).observe(stage); } catch (e) { /* ignore */ } }
     requestAnimationFrame(layout);
     setTimeout(layout, 250);
+    if (NG.embed) { setTimeout(layout, 700); setTimeout(layout, 1500); setInterval(NG.report, 1200); }
+    S.app = app;
     return S;
   };
 
@@ -310,7 +347,7 @@
   // o: title, big, lines:[html], buttons:[{t, primary, fn}]
   NG.dialog = function (o) {
     NG.closeDialog();
-    var host = (S && S.stage) || body;
+    var host = (NG.embed && S && S.app) || (S && S.stage) || body;
     var ov = el('div', 'ov'); var card = el('div', 'card');
     if (o.title) card.appendChild(el('h2', '', o.title));
     if (o.big != null) card.appendChild(el('div', 'big', String(o.big)));
@@ -346,14 +383,12 @@
     if (isBest) lines.unshift('<span class="good">New best!</span>');
     else if (!o.noBest) lines.push('Best: ' + (o.format ? o.format(NG.best()) : NG.best()));
     NG.snd(o.win ? 'win' : 'lose');
-    NG.dialog({
-      title: o.title || 'Game over', big: shown, lines: lines,
-      buttons: [
-        { t: 'Play again', primary: true, fn: o.again },
-        { t: 'Share score', keep: true, fn: function () { NG.share(shown); } },
-        { t: 'More games', fn: function () { location.href = 'index.html'; } }
-      ]
-    });
+    var buttons = [{ t: 'Play again', primary: true, fn: o.again }];
+    if (!NG.embed) {
+      buttons.push({ t: 'Share score', keep: true, fn: function () { NG.share(shown); } });
+      buttons.push({ t: 'More games', fn: function () { location.href = 'index.html'; } });
+    }
+    NG.dialog({ title: o.title || 'Game over', big: shown, lines: lines, buttons: buttons });
   };
 
   // Lets a test read what the game is doing: NG.expose({score: fn, over: fn})
