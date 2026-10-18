@@ -69,9 +69,9 @@ The chatbot, `/ai`, `/gpt`, `/gemini`, `/story`, `/summarize` and the smart comm
 1. `AI_API_KEY`: Groq by default (a free key at console.groq.com/keys, no card). Any OpenAI-style service works if you also set `AI_BASE_URL` and `AI_MODEL`.
 2. `GEMINI_API_KEY`: Google AI Studio (free key at aistudio.google.com/apikey, no card).
 3. `OPENROUTER_API_KEY`: OpenRouter (free key at openrouter.ai/keys, uses the free models).
-4. The free endpoints that need no key. They are only a way out: a service with no account behind it can stop answering any day.
+4. Services that need no key at all: LLM7, Prexzy, Pollinations and OVH AI Endpoints. They take turns at being asked first, so no single one gets used up, and the bot stays under each one's limit per minute. They work with no setup, but a service with no account behind it can stop answering any day. `LLM7_TOKEN` is optional: a free token from token.llm7.io raises LLM7 from 30 to 120 questions a minute.
 
-Set one or two keys and the bot keeps answering. The owner can send `/aistatus` to see which service works, and `/aistatus test` to ask each one once.
+Set one or two keys and the bot keeps answering even if every keyless service is down. The owner can send `/aistatus` to see which service works, and `/aistatus test` to ask each one once.
 
 ## Panel
 
