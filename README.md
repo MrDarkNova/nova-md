@@ -62,6 +62,17 @@ The bot starts in **private** mode: it only answers the owner (and sudo). Random
 
 `/update` checks this repo. If nothing changed, it says the bot is up to date and does not restart. Your `.env` and session stay where they are.
 
+### Keeping the chatbot and the AI commands answering
+
+The chatbot, `/ai`, `/gpt`, `/gemini`, `/story`, `/summarize` and the smart commands all ask the same list of AI services. They are tried in this order, and a service that fails is skipped for a while, so one going down does not stop the bot:
+
+1. `AI_API_KEY`: Groq by default (a free key at console.groq.com/keys, no card). Any OpenAI-style service works if you also set `AI_BASE_URL` and `AI_MODEL`.
+2. `GEMINI_API_KEY`: Google AI Studio (free key at aistudio.google.com/apikey, no card).
+3. `OPENROUTER_API_KEY`: OpenRouter (free key at openrouter.ai/keys, uses the free models).
+4. The free endpoints that need no key. They are only a way out: a service with no account behind it can stop answering any day.
+
+Set one or two keys and the bot keeps answering. The owner can send `/aistatus` to see which service works, and `/aistatus test` to ask each one once.
+
 ## Panel
 
 Use a host that stays online. The startup command is `npm start`. Install `ffmpeg` on the host so audio effects and video conversion can run.
