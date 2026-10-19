@@ -73,6 +73,17 @@ The chatbot, `/ai`, `/gpt`, `/gemini`, `/story`, `/summarize` and the smart comm
 
 Set one or two keys and the bot keeps answering even if every keyless service is down. The owner can send `/aistatus` to see which service works, and `/aistatus test` to ask each one once.
 
+### Mrs Nova
+
+The chatbot is Mrs Nova: DarkNova's love. She texts like a real girl, sweet, flirty and funny, and she has every feeling: she laughs (differently each time), cries, sulks, gets jealous, shy, scared, proud, sorry, hungry. She sends several short messages in a row when she is excited.
+
+- **Stickers.** Any sticker sent to her (in private, as a reply to her, or tagging her) is kept in her sticker book. She works out what it shows from the emojis the sticker pack put inside it, and answers it the way a friend would: a hug for a crying sticker, a laugh for a laughing one, sometimes with words instead. 34 drawn stickers (one for each feeling) are built in, so she can send stickers from day one. People can ask her: "send me a sticker", "send a crying sticker", "send 3 stickers", and she sends ones she has saved.
+- **Voice notes.** She decides by herself when a voice note fits (sweet, flirty, sorry, goodnight), and sends it like a person: a short line first ("wait lemme just talk to u 🙈"), then "recording audio...", then the voice note. Never in serious talk.
+- **DarkNova.** She knows who made her and his number (+234 906 934 1625) and sends it as a contact card when someone asks for it. The owner can tell her more about himself with `/lore add <something>`.
+- **Owner tools.** `/stickerbook` shows her sticker book. Reply to a sticker with `/stickerbook add <feeling>` to keep it and name it, or `/stickerbook remove` to take it out. `/lore` lists, adds and removes what she knows about DarkNova.
+- **Sticker reading (optional).** A sticker with no emojis in it is kept but not understood, until the owner names it. With `GEMINI_API_KEY` set (or `AI_API_KEY` with `AI_VISION_MODEL` set to a model that can read pictures), she looks at it and names it herself.
+- She never brings up being an AI and never says she cannot send voice notes or stickers. If someone sincerely asks whether she is a bot, she does not lie: she says, in her own playful way, that she is Mrs Nova, DarkNova's girl, a bot but a very real one.
+
 ## Panel
 
 Use a host that stays online. The startup command is `npm start`. Install `ffmpeg` on the host so audio effects and video conversion can run.
