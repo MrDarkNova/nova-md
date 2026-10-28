@@ -58,6 +58,8 @@ The bot starts in **private** mode: it only answers the owner (and sudo). Random
 
 `/pair 2348012345678` is for the owner. It sends three short steps first, then the pairing code alone in the next message, in the same chat where you used the command, so it is easy to copy. Inside a paired bot it points to the Telegram bot instead.
 
+In the Telegram admin panel, **WAKE ALL** wakes everything: the main bot reconnects to WhatsApp right away if it is down (without waiting out a back-off), and every paired session is checked. One that is not running is started, one that is running but not connected to WhatsApp (stuck, silent or waiting) is restarted, and one that is connected is left alone. The panel then says what it did for each. Sessions live in the bot's data folder, so on a host without a mounted volume a redeploy wipes them and there is nothing to wake until they are paired again.
+
 `/chatbot group` answers when someone tags the bot in a group (or replies to one of its messages). `/chatbot private` answers every private chat and never a group. `/chatbot off` turns it off. Send `/chatbot` to see the current mode.
 
 `/update` checks this repo. If nothing changed, it says the bot is up to date and does not restart. Your `.env` and session stay where they are.
